@@ -21,6 +21,8 @@
 
 ;; ----------------------------------------
 
+(define *flash-state* (hash 'input ""))
+
 (define (flash-initial)
   (let* ([cursor-line
            (if
@@ -29,6 +31,10 @@
              0)]
          [text (rope->string (rope->line editor->text cursor-line))])
     (flash-initial text)))
+
+(define (flash-update-status)
+  (let* ([input (hash-ref *flash-state* 'input)])
+    (set-status! (to-string "flash:" input))))
 
 (define (flash-render state rect frame)
   (let*
@@ -41,31 +47,39 @@
          (editor-focused-buffer-area)
          ;(buffer-area frame)
          #f)]
-     [input (hash-ref state 'input)])
+     [input (hash-ref *flash-state* 'input)])
   (begin
-    (set-warning! (to-string "flash:" input))
-    (frame-set-string! frame (+ (area-y rect) (+ 1 (position-col cursor-pos))) (+ (area-x rect) (position-row cursor-pos)) "?" (style-with-bold (theme-scope "ui.cursor.match")))
+    (flash-update-status)
+    (frame-set-string! frame (+ (area-y rect) 1 (position-col cursor-pos)) (+ (area-x rect) (position-row cursor-pos)) "?" (style-with-bold (theme-scope "ui.cursor.match")))
     )))
 
 (define (flash-handle-event state event)
-  (when (key-event? event)
-    (begin
-      (cond
-        ((key-event-escape? event)
-         (pop-last-component-by-name! "flash"))
-        ((key-event-backspace? event)
-         (let*
-           ([input (hash-ref state 'input)]
-            [input-len (string-length input)]
-            [key-str (to-string (key-event-char event))])
-           (when (> 0 input-len)
-             (hash-insert state 'input (substring input 0 (- 1 input-len))))))
-        ((key-event-char event)
-          (hash-insert state 'input (string-append (hash-ref state 'input) (to-string (key-event-char event))))))
-    event-result/consume)))
+  (define key-char (key-event-char event))
+  (cond
+    [(key-event-escape? event) (set-status! "") event-result/close]
+    [(key-event-backspace? event)
+     (let*
+       ([input (hash-ref *flash-state* 'input)]
+        [input-len (string-length input)]
+        [key-str (to-string key-char)])
+       (if (> input-len 0)
+         (begin
+           (set! *flash-state* (hash-insert *flash-state* 'input (substring input 0 (- input-len 1))))
+           event-result/consume)
+         event-result/consume))
+     (flash-update-status)]
+    [(char? key-char)
+      (set! *flash-state* (hash-insert *flash-state* 'input (apply string (append (string->list (hash-ref *flash-state* 'input)) (list key-char)))))
+      (flash-update-status)
+      event-result/consume]
+    [else
+      (enqueue-thread-local-callback (lambda () void))
+      event-result/ignore]))
+
+(define (flash-handle-cursor-event state event) #f)
 
 (define (flash)
-  (push-component! (new-component! "flash" (hash 'input "") flash-render (hash "handle_event" flash-handle-event))))
+  (push-component! (new-component! "flash" *flash-state* flash-render (hash "handle_event" flash-handle-event "cursor" flash-handle-cursor-event))))
 
 (provide flash)
 
