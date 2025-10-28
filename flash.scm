@@ -1,8 +1,9 @@
 (require "helix/editor.scm")
-(require "helix/commands.scm")
-(require "helix/static.scm")
+(require (prefix-in helix.commands. "helix/commands.scm"))
+(require (prefix-in helix.static. "helix/static.scm"))
 (require "helix/components.scm")
 (require "helix/misc.scm")
+(require "helix/configuration.scm")
 (require-builtin helix/core/text)
 (require-builtin steel/lists)
 (require-builtin steel/strings)
@@ -21,42 +22,60 @@
 
 ;; ----------------------------------------
 
-(define *flash-state* (hash 'input ""))
-
-(define (flash-initial)
-  (let* ([cursor-line
-           (if
-             (Position? cursor-position)
-             (position-row cursor-position)
-             0)]
-         [text (rope->string (rope->line editor->text cursor-line))])
-    (flash-initial text)))
+(define (default-flash-state) (hash 'input ""))
+(define *flash-state* (default-flash-state))
 
 (define (flash-update-status)
   (let* ([input (hash-ref *flash-state* 'input)])
     (set-status! (to-string "flash:" input))))
 
-(define (flash-first-cursor-pos)
+(define (map-matches idx input line)
+  (map (lambda (ms) (append (list ms) (list idx))) (find-matches input line)))
+
+(define (matches-and-labels input lines as)
+  (transduce
+    lines
+    (compose
+      (enumerating)
+      (flat-mapping (lambda (a) (map-matches (first a) input (second a)))) ; inverted arguments because x is the _column_ and y is _line index_
+      (taking (length as))
+      (zipping as)
+      (mapping (lambda (a) (append (first a) (list (second a)))))) ; produces (x y jump-label)
+    (into-list)))
+
+(define (flash-first-cursor-pos-on-screen)
   (if (and (list? (current-cursor)) (not (empty? (current-cursor))) (Position? (first (current-cursor))))
            (first (current-cursor))
            #f))
 
-(define (flash-frame-rect)
-  (if (Rect? (editor-focused-buffer-area))
-         (editor-focused-buffer-area)
-         ;(buffer-area frame)
-         #f))
+(define (flash-max-line-on-screen rect)
+  (let*
+    ([cursor-line-on-screen (position-row (flash-first-cursor-pos-on-screen))]
+     [cursor-line-in-buffer (helix.static.get-current-line-number)]
+     [lines-on-screen (area-height rect)])
+    (- lines-on-screen (- cursor-line-in-buffer cursor-line-on-screen))))
+
+(define (flash-jump-label-alphabet)
+  (map string (map integer->char (range (char->integer #\a) (char->integer #\z)))))
 
 (define (flash-render state rect frame)
   (let*
-    ([cursor-pos (flash-first-cursor-pos)]
-     [frame-rect (flash-frame-rect)]
+    ([cursor-line (helix.static.get-current-line-number)]
+     [max-line (flash-max-line-on-screen rect)]
+     [cursor-line-on-screen (position-row (flash-first-cursor-pos-on-screen))]
+     [cursor-line-in-buffer (helix.static.get-current-line-number)]
+     [lines-on-screen (area-height rect)]
+     [alphabet (flash-jump-label-alphabet)]
+     [full-text (editor->text (editor->doc-id (editor-focus)))]
+     [lines (map (lambda (n) (rope->string (rope->line full-text n))) (range cursor-line (+ 1 cursor-line (- lines-on-screen cursor-line-on-screen))))]
      [input (hash-ref *flash-state* 'input)]
-     [x (+ (area-y rect) 1 (position-col cursor-pos))]
-     [y (+ (area-x rect) (position-row cursor-pos))]
      [style (style-with-bold (theme-scope "ui.cursor.match"))])
-    (flash-update-status)
-    (frame-set-string! frame x y "?" style)))
+    (if (> (string-length input) 0)
+        (let*
+          ([matches (matches-and-labels input lines alphabet)])
+          (begin
+           (map (lambda (a) (begin (frame-set-string! frame (first a) (+ cursor-line-on-screen (second a)) (third a) style) #t)) matches)
+           (flash-update-status))))))
 
 (define (flash-remove-last-input-char)
   (let*
@@ -76,6 +95,7 @@
   (cond
     [(key-event-escape? event)
      (set-status! "")
+     (set! *flash-state* (default-flash-state))
      event-result/close]
     [(key-event-backspace? event)
      (flash-remove-last-input-char)
