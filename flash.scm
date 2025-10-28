@@ -22,7 +22,7 @@
 
 ;; ----------------------------------------
 
-(define (default-flash-state) (hash 'input ""))
+(define (default-flash-state) (hash 'input "" 'start-pos (position 0 0) 'gutter 0 'cursor-to-be #f))
 (define *flash-state* (default-flash-state))
 
 (define (flash-update-status)
@@ -48,34 +48,34 @@
            (first (current-cursor))
            #f))
 
-(define (flash-max-line-on-screen rect)
-  (let*
-    ([cursor-line-on-screen (position-row (flash-first-cursor-pos-on-screen))]
-     [cursor-line-in-buffer (helix.static.get-current-line-number)]
-     [lines-on-screen (area-height rect)])
-    (- lines-on-screen (- cursor-line-in-buffer cursor-line-on-screen))))
-
+; INFO: reading from config does not work https://github.com/helix-editor/helix/pull/8675/commits/b7725c818708369cb42f03538625d2bbea01a948
 (define (flash-jump-label-alphabet)
   (map string (map integer->char (range (char->integer #\a) (char->integer #\z)))))
 
 (define (flash-render state rect frame)
   (let*
-    ([cursor-line (helix.static.get-current-line-number)]
-     [max-line (flash-max-line-on-screen rect)]
-     [cursor-line-on-screen (position-row (flash-first-cursor-pos-on-screen))]
-     [cursor-line-in-buffer (helix.static.get-current-line-number)]
+    ([cursor-on-screen (flash-first-cursor-pos-on-screen)]
+     [cursor-in-buffer (position (helix.static.get-current-line-number) (helix.static.get-current-column-number))]
+     [cursor-line-on-screen (position-row cursor-on-screen)]
+     [cursor-line-in-buffer (position-row cursor-in-buffer)]
+     [cursor-column-in-buffer (position-col cursor-in-buffer)]
+     [cursor-column-on-screen (position-col cursor-on-screen)]
+     [gutter (hash-ref *flash-state* 'gutter)]
      [lines-on-screen (area-height rect)]
      [alphabet (flash-jump-label-alphabet)]
      [full-text (editor->text (editor->doc-id (editor-focus)))]
-     [lines (map (lambda (n) (rope->string (rope->line full-text n))) (range cursor-line (+ 1 cursor-line (- lines-on-screen cursor-line-on-screen))))]
+     [lines (map (lambda (n) (rope->string (rope->line full-text n))) (range cursor-line-in-buffer (+ 1 cursor-line-in-buffer (- lines-on-screen cursor-line-on-screen))))]
      [input (hash-ref *flash-state* 'input)]
      [style (style-with-bold (theme-scope "ui.cursor.match"))])
     (if (> (string-length input) 0)
         (let*
           ([matches (matches-and-labels input lines alphabet)])
           (begin
-           (map (lambda (a) (begin (frame-set-string! frame (first a) (+ cursor-line-on-screen (second a)) (third a) style) #t)) matches)
-           (flash-update-status))))))
+           ; (map (lambda (a) (frame-set-string! frame (first a) (+ cursor-line-on-screen (second a)) (+ gutter (third a)) style)) matches) ; TODO: throws panic
+           ; (frame-set-string! frame (+ 1 cursor-column-on-screen) 1 input style)
+           ; (flash-update-status)
+           (set-status! (to-string "flash: " input " ; gutter: " gutter "; cursor: " cursor-column-on-screen "/" cursor-column-in-buffer "->" (first (first matches)) "/" (second (first matches)) "/" (third (first matches))))
+           )))))
 
 (define (flash-remove-last-input-char)
   (let*
@@ -95,7 +95,7 @@
   (cond
     [(key-event-escape? event)
      (set-status! "")
-     (set! *flash-state* (default-flash-state))
+     (set! *flash-state* (hash-insert *flash-state* 'cursor-to-be (hash-ref *flash-state* 'start-pos)))
      event-result/close]
     [(key-event-backspace? event)
      (flash-remove-last-input-char)
@@ -109,17 +109,27 @@
       (enqueue-thread-local-callback (lambda () void))
       event-result/ignore]))
 
-(define (flash-handle-cursor-event state event) #f)
+(define (flash-handle-cursor-event state event)
+  (let*
+    ([pos (hash-ref *flash-state* 'cursor-to-be)])
+    (begin
+      ; (set! *flash-state* (hash-insert *flash-state* 'cursor-to-be #f))
+        pos)))
 
 (define (flash)
-  (push-component!
-    (new-component!
-      "flash"
-      *flash-state*
-      flash-render
-      (hash
-        "handle_event" flash-handle-event
-        "cursor" flash-handle-cursor-event))))
+  (begin
+    (set! *flash-state* (hash-insert (default-flash-state) 'start-pos (flash-first-cursor-pos-on-screen)))
+    (helix.static.goto_line_start)
+    (set! *flash-state* (hash-insert *flash-state* 'gutter (position-col (flash-first-cursor-pos-on-screen))))
+    (set! *flash-state* (hash-insert *flash-state* 'cursor-to-be (hash-ref *flash-state* 'start-pos))) ; TODO: this creates a second cursor, but does not actually move the original cursor
+    (push-component!
+      (new-component!
+        "flash"
+        *flash-state*
+        flash-render
+        (hash
+          "handle_event" flash-handle-event
+          "cursor" flash-handle-cursor-event)))))
 
 (provide flash)
 
