@@ -27,6 +27,11 @@
           (first lst)
           (find-first f (rest lst)))))
 
+(define (zip l1 l2)
+  (let*
+    ([len (min (length l1) (length l2))])
+    (map (lambda (i) (list (list-ref l1 i) (list-ref l2 i))) (range len))))
+
 ;; ----------------------------------------
 
 (define (default-flash-state) (hash 'input "" 'cursor-to-be #f 'matches '()))
@@ -41,19 +46,52 @@
     (lambda (ms) (hash 'col ms 'row idx 'next-char (string-ref line (+ ms (string-length input)))))
     (find-matches input line)))
 
-(define (matches-and-labels input lines as)
+(define softwrap-width 2)
+
+(define (pack-into-sub width lines line-idx)
+  (if (empty? lines) 
+    '()
+    (let*
+      ([first-line (first lines)]
+       [s-line (hash-ref first-line 'line)]
+       [len (string-length s-line)]
+       [matches (hash-ref first-line 'matches)])
+      (if (<= len width)
+        (append 
+          (list 
+            (~> first-line
+              (hash-insert 'idx line-idx)
+              (hash-insert 'matches (map (lambda (m) (hash 'row line-idx 'col m 'char-idx m)) matches))))
+          (pack-into-sub width (rest lines) (+ 1 line-idx)))
+        (append
+          (list 
+            (~> first-line
+              (hash-insert 'matches (map (lambda (m) (hash 'char-idx m 'row (+ line-idx (floor (/ m width))) 'col (if (> m width) (+ softwrap-width (modulo m width)) m))) matches))
+              (hash-insert 'idx line-idx)))
+          (pack-into-sub width (rest lines) (+ (ceiling (/ len width)) line-idx)))))))
+
+(define (pack-into width lines)
+  (if (or (not (list? lines)) (empty? lines))
+    #f
+    (pack-into-sub width lines 0)))
+
+(define (matches-and-labels input lines as max-line-length)
   (let*
-    ([lines-with-matches (transduce
-      lines
-      (compose
-        (enumerating)
-        (flat-mapping (lambda (a) (map-matches (first a) input (second a))))
-      )
-      (into-list))]
-     [next-chars (list->hashset (map (lambda (l) (hash-ref l 'next-char)) lines-with-matches))]
+    ([lines-with-matches (map (lambda (l) (hash 'line l 'matches (find-matches input l))) lines)]
+     [lines-with-positions (pack-into max-line-length lines-with-matches)]
+     [matches-with-positions
+       (flatten
+         (map
+           (lambda (l)
+                   (map
+                     (lambda (m)
+                             (hash 'idx (hash-ref l 'idx) 'row (hash-ref m 'row) 'col (hash-ref m 'col) 'next-char (string-ref (hash-ref l 'line) (+ 1 (hash-ref m 'char-idx)))))
+                     (hash-ref l 'matches)))
+           lines-with-positions))]
+     [next-chars (list->hashset (map (lambda (l) (hash-ref l 'next-char)) matches-with-positions))]
      [alphabet (filter (lambda (a) (not (hashset-contains? next-chars a))) as)])
     (transduce
-      lines-with-matches
+      matches-with-positions
       (compose
         (taking (length alphabet))
         (zipping alphabet)
@@ -96,16 +134,23 @@
     )
     lines))
 
-(define (flash-render-jump-labels frame matches input)
+(define (flash-get-gutter)
   (let*
     ([cursor-on-screen (flash-first-cursor-pos-on-screen)]
      [cursor-in-buffer (position (helix.static.get-current-line-number) (helix.static.get-current-column-number))]
-     [cursor-line-on-screen (position-row cursor-on-screen)]
      [cursor-column-in-buffer (position-col cursor-in-buffer)]
      [cursor-column-on-screen (position-col cursor-on-screen)]
-     [gutter (- cursor-column-on-screen cursor-column-in-buffer)]
+     [gutter (- cursor-column-on-screen cursor-column-in-buffer)])
+    gutter))
+
+(define (flash-render-jump-labels frame matches input)
+  (let*
+    ([cursor-on-screen (flash-first-cursor-pos-on-screen)]
+     [cursor-line-on-screen (position-row cursor-on-screen)]
+     [gutter (flash-get-gutter)]
      [label-style (style-with-bold (theme-scope "ui.cursor.match"))]
-     [match-style (style-with-italics (theme-scope "ui.text.focus"))])
+     [match-style (style-with-italics (theme-scope "ui.text.focus"))]
+     )
   (map
     (lambda (a)
       (let*
@@ -126,10 +171,11 @@
     ([cursor-line-in-buffer (helix.static.get-current-line-number)]
      [alphabet (flash-jump-label-alphabet)]
      [lines (flash-get-lines-forward cursor-line-in-buffer)]
-     [input (hash-ref *flash-state* 'input)])
+     [input (hash-ref *flash-state* 'input)]
+     [max-line-width (- (area-width rect) (flash-get-gutter) 1)])
     (if (> (string-length input) 0)
         (let*
-          ([matches (matches-and-labels input lines alphabet)])
+          ([matches (matches-and-labels input lines alphabet max-line-width)])
           (begin
            (flash-render-jump-labels frame matches input)
            (flash-update-status)
