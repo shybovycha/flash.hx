@@ -48,7 +48,7 @@
       (enumerating)
       (flat-mapping (lambda (a) (map-matches (first a) input (second a)))) ; inverted arguments because x is the _column_ and y is _line index_
       (taking (length as))
-      (zipping as)
+      (zipping as) ; INFO: transducers won't do here, as need an access to the entire array to filter `as`
       (mapping (lambda (a) (append (first a) (list (second a)))))) ; produces (x y jump-label)
     (into-list)))
 
@@ -84,9 +84,10 @@
      [gutter (- cursor-column-on-screen cursor-column-in-buffer)]
      [lines-on-screen (area-height rect)]
      [alphabet (flash-jump-label-alphabet)]
-     [full-text (editor->text (editor->doc-id (editor-focus)))]
+     [full-text (rope->string (editor->text (editor->doc-id (editor-focus))))]
      ; TODO: either skip the text before cursor and offset first line matches accordingly, or use an entire screen worth of text
-     [lines (map (lambda (n) (rope->string (rope->line full-text n))) (range cursor-line-in-buffer (+ 1 cursor-line-in-buffer (- lines-on-screen cursor-line-on-screen))))]
+     ; TODO: limit the number of lines on the screen / in the buffer
+     [lines (list-drop (split-many full-text "\n") cursor-line-in-buffer)] ;(map (lambda (n) (rope->string (rope->line full-text n))) (range cursor-line-in-buffer (+ 1 cursor-line-in-buffer (- lines-on-screen cursor-line-on-screen))))]
      [input (hash-ref *flash-state* 'input)]
      [label-style (style-with-bold (theme-scope "ui.cursor.match"))]
      [match-style (style-with-italics (theme-scope "ui.text.focus"))])
@@ -103,6 +104,8 @@
                       [match-col (+ gutter (string-length input) match-x)])
                      (begin
                        (frame-set-string! frame match-col match-row label label-style)
+                       ; INFO: this works extremely poorly with wrapped lines (soft-wraps)
+                       ; TODO: need to account for gutter + line width + line-wrap string (character?) and accumulate over all lines
                        (map (lambda (x) (frame-set-string! frame (+ gutter match-x x) match-row (string (string-ref input x)) match-style)) (range (string-length input))))))
               matches)
            (flash-update-status)
