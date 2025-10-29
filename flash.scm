@@ -1,3 +1,4 @@
+
 (require "helix/editor.scm")
 (require (prefix-in helix.commands. "helix/commands.scm"))
 (require (prefix-in helix.static. "helix/static.scm"))
@@ -227,7 +228,8 @@
             (flash-append-input-char key-char)
             (flash-update-status)
             event-result/consume)))]
-    [else event-result/close]))
+    [(key-event? event) event-result/close]
+    [else event-result/ignore]))
 
 (define (flash-handle-cursor-event state event) #f)
 
