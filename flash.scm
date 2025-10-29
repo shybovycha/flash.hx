@@ -20,9 +20,21 @@
 (define (find-matches pattern source)
   (find-matches-rec pattern source 0 '()))
 
+; (define (any? f lst)
+;   (if (or (not (list? lst)) (empty? lst))
+;       #f
+;       (or (f (first lst)) (any? f (rest lst)))))
+
+(define (find-first f lst)
+  (if (or (not (list? lst)) (empty? lst))
+      #f
+      (if (f (first lst))
+          (first lst)
+          (find-first f (rest lst)))))
+
 ;; ----------------------------------------
 
-(define (default-flash-state) (hash 'input "" 'start-pos (position 0 0) 'gutter 0 'cursor-to-be #f))
+(define (default-flash-state) (hash 'input "" 'cursor-to-be #f 'matches '()))
 (define *flash-state* (default-flash-state))
 
 (define (flash-update-status)
@@ -50,7 +62,36 @@
 
 ; INFO: reading from config does not work https://github.com/helix-editor/helix/pull/8675/commits/b7725c818708369cb42f03538625d2bbea01a948
 (define (flash-jump-label-alphabet)
-  (map string (map integer->char (range (char->integer #\a) (char->integer #\z)))))
+  (map integer->char (range (char->integer #\a) (char->integer #\z))))
+
+; INFO: moving cursor to a specified position is impossible otherwise
+
+(define (move-cursor-by rows cols)
+  (if (and (= 0 rows) (= 0 cols))
+      #t
+      (begin
+        (cond
+          [(> rows 0) (helix.static.move_line_down) (move-cursor-by (- rows 1) cols)]
+          [(< rows 0) (helix.static.move_line_up) (move-cursor-by (+ rows 1) cols)]
+          [(> cols 0) (helix.static.move_char_right) (move-cursor-by rows (- cols 1))]
+          [(< cols 0) (helix.static.move_char_left) (move-cursor-by rows (+ cols 1))]
+          [else #t]))))
+
+(define (flash-move-cursor-to row col)
+  (let*
+    ([cursor-row (helix.static.get-current-line-number)]
+     [cursor-col (helix.static.get-current-column-number)]
+     [d-rows (- cursor-row row)]
+     [d-cols (- cursor-col col)])
+    (begin
+      (set-status! (to-string "move cursor by " d-rows "x" d-cols " to get from " cursor-row "x" cursor-col " to " row "x" col))
+      (move-cursor-by d-rows d-cols))))
+
+; (define (flash-move-cursor-by rows-s cols-s)
+;   (let*
+;     ([rows (string->number rows-s)]
+;      [cols (string->number cols-s)])
+;     (move-cursor-by rows cols)))
 
 (define (flash-render state rect frame)
   (let*
@@ -76,7 +117,7 @@
              (lambda (a) (let*
                      ([match-x (first a)]
                       [match-y (second a)]
-                      [label (third a)]
+                      [label (string (third a))]
                       [match-row (+ cursor-line-on-screen match-y)]
                       [match-col (+ gutter (string-length input) match-x)])
                      (begin
@@ -84,6 +125,7 @@
                        (map (lambda (x) (frame-set-string! frame (+ gutter match-x x) match-row (string (string-ref input x)) match-style)) (range (string-length input))))))
               matches)
            (flash-update-status)
+           (set! *flash-state* (hash-insert *flash-state* 'matches matches))
            )))))
 
 (define (flash-remove-last-input-char)
@@ -104,16 +146,31 @@
   (cond
     [(key-event-escape? event)
      (set-status! "")
-     (set! *flash-state* (hash-insert *flash-state* 'cursor-to-be (hash-ref *flash-state* 'start-pos)))
+     ; (set! *flash-state* (hash-insert *flash-state* 'cursor-to-be (hash-ref *flash-state* 'start-pos)))
      event-result/close]
     [(key-event-backspace? event)
      (flash-remove-last-input-char)
      (flash-update-status)
      event-result/consume]
     [(char? key-char)
-      (flash-append-input-char key-char)
-      (flash-update-status)
-      event-result/consume]
+     (let*
+       ([matches (hash-ref *flash-state* 'matches)]
+        [found-match (find-first (lambda (m) (char=? key-char (third m))) matches)])
+       (if found-match
+          (begin
+            ; INFO: this does not work either
+            ; (set! *flash-state* (hash-insert *flash-state* 'cursor-to-be '(3 3)))
+            ; INFO: there is no reasonable way to move cursor to a position and then pop the component
+            ; (helix.static.goto_line (first found-match)) ; goto_line does not have arguments... WAT?!
+            ; (helix.static.goto_column (second found-match)) ; goto_column also does not have arguments. WAT?!
+            ; (move-cursor-by (+ (second found-match) (- (string-length (hash-ref *flash-state* 'input)) 1) (- (position-col (flash-first-cursor-pos-on-screen)))) (first found-match))
+            (move-cursor-by (second found-match) (+ (- (first found-match) (helix.static.get-current-column-number)) 1))
+            ; (set-status! (to-string "move-cursor-to" (first found-match) (second found-match) "::" (helix.static.get-current-column-number)))
+            event-result/close)
+          (begin
+            (flash-append-input-char key-char)
+            (flash-update-status)
+            event-result/consume)))]
     [else
       (enqueue-thread-local-callback (lambda () void))
       event-result/ignore]))
@@ -121,13 +178,16 @@
 (define (flash-handle-cursor-event state event)
   (let*
     ([pos (hash-ref *flash-state* 'cursor-to-be)])
-    (begin
-      ; (set! *flash-state* (hash-insert *flash-state* 'cursor-to-be #f))
-        pos)))
+    (if pos
+        (begin
+          ; this won't work, apparently
+          (enqueue-thread-local-callback (lambda () (pop-last-component-by-name! "flash")))
+          pos)
+        #f)))
 
 (define (flash)
   (begin
-    (set! *flash-state* (hash-insert (default-flash-state) 'start-pos (flash-first-cursor-pos-on-screen)))
+    (set! *flash-state* (default-flash-state))
     (push-component!
       (new-component!
         "flash"
