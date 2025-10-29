@@ -66,15 +66,24 @@
      [full-text (editor->text (editor->doc-id (editor-focus)))]
      [lines (map (lambda (n) (rope->string (rope->line full-text n))) (range cursor-line-in-buffer (+ 1 cursor-line-in-buffer (- lines-on-screen cursor-line-on-screen))))]
      [input (hash-ref *flash-state* 'input)]
-     [style (style-with-bold (theme-scope "ui.cursor.match"))])
+     [label-style (style-with-bold (theme-scope "ui.cursor.match"))]
+     [match-style (style-with-italics (theme-scope "ui.text.focus"))])
     (if (> (string-length input) 0)
         (let*
           ([matches (matches-and-labels input lines alphabet)])
           (begin
-           (map (lambda (a) (frame-set-string! frame (+ gutter (first a)) (+ cursor-line-on-screen (second a)) (third a) style)) matches)
-           ; (frame-set-string! frame (+ 1 cursor-column-on-screen) 1 input style)
-           ; (flash-update-status)
-           (set-status! (to-string "flash: " input " ; gutter: " gutter "; cursor: " cursor-column-on-screen "/" cursor-column-in-buffer "->" (first (first matches)) "/" (second (first matches)) "/" (third (first matches))))
+           (map
+             (lambda (a) (let*
+                     ([match-x (first a)]
+                      [match-y (second a)]
+                      [label (third a)]
+                      [match-row (+ cursor-line-on-screen match-y)]
+                      [match-col (+ gutter (string-length input) match-x)])
+                     (begin
+                       (frame-set-string! frame match-col match-row label label-style)
+                       (map (lambda (x) (frame-set-string! frame (+ gutter match-x x) match-row (string (string-ref input x)) match-style)) (range (string-length input))))))
+              matches)
+           (flash-update-status)
            )))))
 
 (define (flash-remove-last-input-char)
