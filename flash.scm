@@ -60,7 +60,7 @@
      [cursor-line-in-buffer (position-row cursor-in-buffer)]
      [cursor-column-in-buffer (position-col cursor-in-buffer)]
      [cursor-column-on-screen (position-col cursor-on-screen)]
-     [gutter (hash-ref *flash-state* 'gutter)]
+     [gutter (- cursor-column-on-screen cursor-column-in-buffer)]
      [lines-on-screen (area-height rect)]
      [alphabet (flash-jump-label-alphabet)]
      [full-text (editor->text (editor->doc-id (editor-focus)))]
@@ -119,9 +119,6 @@
 (define (flash)
   (begin
     (set! *flash-state* (hash-insert (default-flash-state) 'start-pos (flash-first-cursor-pos-on-screen)))
-    (helix.static.goto_line_start)
-    (set! *flash-state* (hash-insert *flash-state* 'gutter (position-col (flash-first-cursor-pos-on-screen))))
-    (set! *flash-state* (hash-insert *flash-state* 'cursor-to-be (hash-ref *flash-state* 'start-pos))) ; TODO: this creates a second cursor, but does not actually move the original cursor
     (push-component!
       (new-component!
         "flash"
