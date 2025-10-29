@@ -81,41 +81,52 @@
           [(< cols 0) (helix.static.move_char_left) (move-cursor-by rows (+ cols 1))]
           [else #t]))))
 
-(define (flash-render state rect frame)
+(define (flash-get-lines-forward cursor-line-in-buffer)
+  (let*
+    ([full-text (rope->string (editor->text (editor->doc-id (editor-focus))))]
+     ; TODO: either skip the text before cursor and offset first line matches accordingly, or use an entire screen worth of text
+     ; TODO: limit the number of lines on the screen / in the buffer
+     ; [lines-on-screen (area-height rect)]
+     [lines (list-drop (split-many full-text "\n") cursor-line-in-buffer)] ;(map (lambda (n) (rope->string (rope->line full-text n))) (range cursor-line-in-buffer (+ 1 cursor-line-in-buffer (- lines-on-screen cursor-line-on-screen))))]
+    )
+    lines))
+
+(define (flash-render-jump-labels frame matches input)
   (let*
     ([cursor-on-screen (flash-first-cursor-pos-on-screen)]
      [cursor-in-buffer (position (helix.static.get-current-line-number) (helix.static.get-current-column-number))]
      [cursor-line-on-screen (position-row cursor-on-screen)]
-     [cursor-line-in-buffer (position-row cursor-in-buffer)]
      [cursor-column-in-buffer (position-col cursor-in-buffer)]
      [cursor-column-on-screen (position-col cursor-on-screen)]
      [gutter (- cursor-column-on-screen cursor-column-in-buffer)]
-     [lines-on-screen (area-height rect)]
-     [alphabet (flash-jump-label-alphabet)]
-     [full-text (rope->string (editor->text (editor->doc-id (editor-focus))))]
-     ; TODO: either skip the text before cursor and offset first line matches accordingly, or use an entire screen worth of text
-     ; TODO: limit the number of lines on the screen / in the buffer
-     [lines (list-drop (split-many full-text "\n") cursor-line-in-buffer)] ;(map (lambda (n) (rope->string (rope->line full-text n))) (range cursor-line-in-buffer (+ 1 cursor-line-in-buffer (- lines-on-screen cursor-line-on-screen))))]
-     [input (hash-ref *flash-state* 'input)]
      [label-style (style-with-bold (theme-scope "ui.cursor.match"))]
      [match-style (style-with-italics (theme-scope "ui.text.focus"))])
+  (map
+    (lambda (a)
+      (let*
+        ([match-x (hash-ref a 'col)]
+         [match-y (hash-ref a 'row)]
+         [label (string (hash-ref a 'label))]
+         [match-row (+ cursor-line-on-screen match-y)]
+         [match-col (+ gutter (string-length input) match-x)])
+         (begin
+           (frame-set-string! frame match-col match-row label label-style)
+           ; INFO: this works extremely poorly with wrapped lines (soft-wraps)
+           ; TODO: need to account for gutter + line width + line-wrap string (character?) and accumulate over all lines
+           (map (lambda (x) (frame-set-string! frame (+ gutter match-x x) match-row (string (string-ref input x)) match-style)) (range (string-length input))))))
+    matches)))
+
+(define (flash-render state rect frame)
+  (let*
+    ([cursor-line-in-buffer (helix.static.get-current-line-number)]
+     [alphabet (flash-jump-label-alphabet)]
+     [lines (flash-get-lines-forward cursor-line-in-buffer)]
+     [input (hash-ref *flash-state* 'input)])
     (if (> (string-length input) 0)
         (let*
           ([matches (matches-and-labels input lines alphabet)])
           (begin
-           (map
-             (lambda (a) (let*
-                     ([match-x (hash-ref a 'col)]
-                      [match-y (hash-ref a 'row)]
-                      [label (string (hash-ref a 'label))]
-                      [match-row (+ cursor-line-on-screen match-y)]
-                      [match-col (+ gutter (string-length input) match-x)])
-                     (begin
-                       (frame-set-string! frame match-col match-row label label-style)
-                       ; INFO: this works extremely poorly with wrapped lines (soft-wraps)
-                       ; TODO: need to account for gutter + line width + line-wrap string (character?) and accumulate over all lines
-                       (map (lambda (x) (frame-set-string! frame (+ gutter match-x x) match-row (string (string-ref input x)) match-style)) (range (string-length input))))))
-              matches)
+           (flash-render-jump-labels frame matches input)
            (flash-update-status)
            (set! *flash-state* (hash-insert *flash-state* 'matches matches))
            )))))
