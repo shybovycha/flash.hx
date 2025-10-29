@@ -70,6 +70,11 @@
   (map integer->char (range (char->integer #\a) (char->integer #\z))))
 
 ; INFO: moving cursor to a specified position is impossible otherwise
+; INFO: this does not work:
+; (set! *flash-state* (hash-insert *flash-state* 'cursor-to-be '(3 3)))
+; INFO: there is no reasonable way to move cursor to a position and then pop the component
+; (helix.static.goto_line (first found-match)) ; goto_line does not have arguments... WAT?!
+; (helix.static.goto_column (second found-match)) ; goto_column also does not have arguments. WAT?!
 (define (move-cursor-by rows cols)
   (if (and (= 0 rows) (= 0 cols))
       #t
@@ -160,11 +165,6 @@
         [found-match (find-first (lambda (m) (char=? key-char (hash-ref m 'label))) matches)])
        (if found-match
           (begin
-            ; INFO: this does not work either
-            ; (set! *flash-state* (hash-insert *flash-state* 'cursor-to-be '(3 3)))
-            ; INFO: there is no reasonable way to move cursor to a position and then pop the component
-            ; (helix.static.goto_line (first found-match)) ; goto_line does not have arguments... WAT?!
-            ; (helix.static.goto_column (second found-match)) ; goto_column also does not have arguments. WAT?!
             (move-cursor-by (hash-ref found-match 'row) (+ (- (hash-ref found-match 'col) (helix.static.get-current-column-number)) 1))
             (set-status! "")
             event-result/close)
