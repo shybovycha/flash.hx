@@ -14,8 +14,7 @@
     (if (> p-len s-len)
        acc
        (if (starts-with? source pattern)
-        ; INFO: +1 in this case offsets searches so that the second "a" in "maa" would be skipped when searching for "a"; this could be made configurable
-        (find-matches-rec pattern (substring source (+ p-len 1)) (+ pos p-len 1) (append acc (list pos)))
+        (find-matches-rec pattern (substring source p-len) (+ pos p-len) (append acc (list pos)))
         (find-matches-rec pattern (substring source 1) (+ pos 1) acc)))))
 
 (define (find-matches pattern source)
@@ -38,19 +37,28 @@
     (set-status! (to-string "flash:" input))))
 
 (define (map-matches idx input line)
-  (map (lambda (ms) (append (list ms) (list idx))) (find-matches input line)))
+  (map
+    (lambda (ms) (hash 'col ms 'row idx 'next-char (string-ref line (+ ms (string-length input)))))
+    (find-matches input line)))
 
-; TODO: filter labels by the last letter of the match
 (define (matches-and-labels input lines as)
-  (transduce
-    lines
-    (compose
-      (enumerating)
-      (flat-mapping (lambda (a) (map-matches (first a) input (second a)))) ; inverted arguments because x is the _column_ and y is _line index_
-      (taking (length as))
-      (zipping as) ; INFO: transducers won't do here, as need an access to the entire array to filter `as`
-      (mapping (lambda (a) (append (first a) (list (second a)))))) ; produces (x y jump-label)
-    (into-list)))
+  (let*
+    ([lines-with-matches (transduce
+      lines
+      (compose
+        (enumerating)
+        (flat-mapping (lambda (a) (map-matches (first a) input (second a))))
+      )
+      (into-list))]
+     [next-chars (list->hashset (map (lambda (l) (hash-ref l 'next-char)) lines-with-matches))]
+     [alphabet (filter (lambda (a) (not (hashset-contains? next-chars a))) as)])
+    (transduce
+      lines-with-matches
+      (compose
+        (taking (length alphabet))
+        (zipping alphabet)
+        (mapping (lambda (a) (hash-insert (first a) 'label (second a)))))
+      (into-list))))
 
 (define (flash-first-cursor-pos-on-screen)
   (if (and (list? (current-cursor)) (not (empty? (current-cursor))) (Position? (first (current-cursor))))
@@ -97,9 +105,9 @@
           (begin
            (map
              (lambda (a) (let*
-                     ([match-x (first a)]
-                      [match-y (second a)]
-                      [label (string (third a))]
+                     ([match-x (hash-ref a 'col)]
+                      [match-y (hash-ref a 'row)]
+                      [label (string (hash-ref a 'label))]
                       [match-row (+ cursor-line-on-screen match-y)]
                       [match-col (+ gutter (string-length input) match-x)])
                      (begin
@@ -138,7 +146,7 @@
     [(char? key-char)
      (let*
        ([matches (hash-ref *flash-state* 'matches)]
-        [found-match (find-first (lambda (m) (char=? key-char (third m))) matches)])
+        [found-match (find-first (lambda (m) (char=? key-char (hash-ref m 'label))) matches)])
        (if found-match
           (begin
             ; INFO: this does not work either
@@ -146,7 +154,8 @@
             ; INFO: there is no reasonable way to move cursor to a position and then pop the component
             ; (helix.static.goto_line (first found-match)) ; goto_line does not have arguments... WAT?!
             ; (helix.static.goto_column (second found-match)) ; goto_column also does not have arguments. WAT?!
-            (move-cursor-by (second found-match) (+ (- (first found-match) (helix.static.get-current-column-number)) 1))
+            (move-cursor-by (hash-ref found-match 'row) (+ (- (hash-ref found-match 'col) (helix.static.get-current-column-number)) 1))
+            (set-status! "")
             event-result/close)
           (begin
             (flash-append-input-char key-char)
