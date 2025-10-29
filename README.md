@@ -2,7 +2,7 @@
 
 This is a [Helix](https://helix-editor.com/) plugin similar to [flash.nvim](https://github.com/folke/flash.nvim) and [leap.nvim](https://github.com/ggandor/leap.nvim).
 
-[demo.webm](/shybovycha/flash.hx/refs/heads/master/demo.webm)
+[output.webm](https://github.com/user-attachments/assets/e3f4e757-fbf3-43eb-8e6a-e4c96eab0c97)
 
 ## Installation
 
