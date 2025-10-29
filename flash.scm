@@ -188,10 +188,8 @@
           ([matches (matches-and-labels input lines alphabet max-line-width)])
           (begin
            (flash-render-jump-labels frame matches input)
-           ; (flash-update-status)
-           (set-status! (to-string "max-line-width:" max-line-width "; matches:" (take (map (lambda (m) (list (hash-ref m 'row) (hash-ref m 'col) (hash-ref m 'label))) matches) 5)))
-           (set! *flash-state* (hash-insert *flash-state* 'matches matches))
-           )))))
+           (flash-update-status)
+           (set! *flash-state* (hash-insert *flash-state* 'matches matches)))))))
 
 (define (flash-remove-last-input-char)
   (let*
@@ -229,15 +227,14 @@
             (flash-append-input-char key-char)
             (flash-update-status)
             event-result/consume)))]
-    [else
-      (enqueue-thread-local-callback (lambda () void))
-      event-result/ignore]))
+    [else event-result/close]))
 
 (define (flash-handle-cursor-event state event) #f)
 
 (define (flash)
   (begin
     (set! *flash-state* (default-flash-state))
+    (set-status! "flash:")
     (push-component!
       (new-component!
         "flash"
