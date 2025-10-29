@@ -41,14 +41,9 @@
   (let* ([input (hash-ref *flash-state* 'input)])
     (set-status! (to-string "flash:" input))))
 
-(define (map-matches idx input line)
-  (map
-    (lambda (ms) (hash 'col ms 'row idx 'next-char (string-ref line (+ ms (string-length input)))))
-    (find-matches input line)))
-
 (define softwrap-width 2)
 
-(define (pack-into-sub width lines line-idx)
+(define (align-matches-with-softwraps-sub width lines line-offset line-idx)
   (if (empty? lines) 
     '()
     (let*
@@ -60,43 +55,60 @@
         (append 
           (list 
             (~> first-line
-              (hash-insert 'idx line-idx)
-              (hash-insert 'matches (map (lambda (m) (hash 'row line-idx 'col m 'char-idx m)) matches))))
-          (pack-into-sub width (rest lines) (+ 1 line-idx)))
+              (hash-insert 'matches (map (lambda (m) (hash 'row line-offset 'col m 'char-idx m)) matches))
+              (hash-insert 'line-idx line-idx)))
+          (align-matches-with-softwraps-sub width (rest lines) (+ 1 line-offset) (+ 1 line-idx)))
         (append
           (list 
             (~> first-line
-              (hash-insert 'matches (map (lambda (m) (hash 'char-idx m 'row (+ line-idx (floor (/ m width))) 'col (if (> m width) (+ softwrap-width (modulo m width)) m))) matches))
-              (hash-insert 'idx line-idx)))
-          (pack-into-sub width (rest lines) (+ (ceiling (/ len width)) line-idx)))))))
+              ; TODO: softwrap happens on the edge of word and non-word character, making it non-uniform line width :sadpanda:
+              (hash-insert 'matches (map (lambda (m) (hash 'char-idx m 'row (+ line-offset (floor (/ m width))) 'col (if (> m width) (+ softwrap-width (modulo m width)) m))) matches))
+              (hash-insert 'line-idx line-idx)))
+          (align-matches-with-softwraps-sub width (rest lines) (+ (ceiling (/ len width)) line-offset) (+ 1 line-idx)))))))
 
-(define (pack-into width lines)
+(define (align-matches-with-softwraps width lines)
   (if (or (not (list? lines)) (empty? lines))
     #f
-    (pack-into-sub width lines 0)))
+    (align-matches-with-softwraps-sub width lines 0 0)))
+
+(define (unpack-matches-sub entries acc)
+  (if (empty? entries)
+    acc
+    (let*
+      ([entry (first entries)]
+       [line (hash-ref entry 'line)]
+       [line-idx (hash-ref entry 'line-idx)]
+       [matches (hash-ref entry 'matches)]
+       [new-matches
+         (map
+           (lambda (m)
+                   (hash
+                     'row (hash-ref m 'row)
+                     'col (hash-ref m 'col)
+                     'line-idx line-idx
+                     'char-idx (hash-ref m 'char-idx)
+                     'next-char (string-ref line (min (- (string-length line) 1) (+ (hash-ref m 'char-idx) 1)))))
+           matches)])
+      (unpack-matches-sub (rest entries) (append acc new-matches)))))
+
+(define (unpack-matches matches)
+  (if (or (not (list? matches)) (empty? matches))
+      '()
+      (unpack-matches-sub matches '())))
+
+(define (assign-labels matches alphabet)
+  (let*
+     ([next-letters (map (lambda (m) (hash-ref m 'next-char)) matches)]
+      [next-letters-set (list->hashset next-letters)]
+      [available-letters (filter (lambda (c) (not (hashset-contains? next-letters-set c))) alphabet)])
+     (map (lambda (m) (hash-insert (first m) 'label (second m))) (zip matches available-letters))))
 
 (define (matches-and-labels input lines as max-line-length)
   (let*
     ([lines-with-matches (map (lambda (l) (hash 'line l 'matches (find-matches input l))) lines)]
-     [lines-with-positions (pack-into max-line-length lines-with-matches)]
-     [matches-with-positions
-       (flatten
-         (map
-           (lambda (l)
-                   (map
-                     (lambda (m)
-                             (hash 'idx (hash-ref l 'idx) 'row (hash-ref m 'row) 'col (hash-ref m 'col) 'next-char (string-ref (hash-ref l 'line) (+ 1 (hash-ref m 'char-idx)))))
-                     (hash-ref l 'matches)))
-           lines-with-positions))]
-     [next-chars (list->hashset (map (lambda (l) (hash-ref l 'next-char)) matches-with-positions))]
-     [alphabet (filter (lambda (a) (not (hashset-contains? next-chars a))) as)])
-    (transduce
-      matches-with-positions
-      (compose
-        (taking (length alphabet))
-        (zipping alphabet)
-        (mapping (lambda (a) (hash-insert (first a) 'label (second a)))))
-      (into-list))))
+     [lines-with-positions (align-matches-with-softwraps max-line-length lines-with-matches)]
+     [flat-matches (unpack-matches lines-with-positions)])
+    (assign-labels flat-matches as)))
 
 (define (flash-first-cursor-pos-on-screen)
   (if (and (list? (current-cursor)) (not (empty? (current-cursor))) (Position? (first (current-cursor))))
@@ -176,7 +188,8 @@
           ([matches (matches-and-labels input lines alphabet max-line-width)])
           (begin
            (flash-render-jump-labels frame matches input)
-           (flash-update-status)
+           ; (flash-update-status)
+           (set-status! (to-string "max-line-width:" max-line-width "; matches:" (take (map (lambda (m) (list (hash-ref m 'row) (hash-ref m 'col) (hash-ref m 'label))) matches) 5)))
            (set! *flash-state* (hash-insert *flash-state* 'matches matches))
            )))))
 
@@ -209,7 +222,7 @@
         [found-match (find-first (lambda (m) (char=? key-char (hash-ref m 'label))) matches)])
        (if found-match
           (begin
-            (move-cursor-by (hash-ref found-match 'row) (+ (- (hash-ref found-match 'col) (helix.static.get-current-column-number)) 1))
+            (move-cursor-by (hash-ref found-match 'line-idx) (+ (- (hash-ref found-match 'char-idx) (helix.static.get-current-column-number)) 1))
             (set-status! "")
             event-result/close)
           (begin
