@@ -2,6 +2,8 @@
 
 This is a [Helix](https://helix-editor.com/) plugin similar to [flash.nvim](https://github.com/folke/flash.nvim) and [leap.nvim](https://github.com/ggandor/leap.nvim).
 
+[demo.webm](/shybovycha/flash.hx/refs/heads/master/demo.webm)
+
 ## Installation
 
 First you need to obtain a fork of Helix with a [working draft](https://github.com/helix-editor/helix/pull/8675) of a plugin system by cloning and building the corresponding [branch](https://github.com/mattwparas/helix/tree/steel-event-system).
