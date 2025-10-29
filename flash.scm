@@ -71,7 +71,7 @@
         (let*
           ([matches (matches-and-labels input lines alphabet)])
           (begin
-           ; (map (lambda (a) (frame-set-string! frame (first a) (+ cursor-line-on-screen (second a)) (+ gutter (third a)) style)) matches) ; TODO: throws panic
+           (map (lambda (a) (frame-set-string! frame (+ gutter (first a)) (+ cursor-line-on-screen (second a)) (third a) style)) matches)
            ; (frame-set-string! frame (+ 1 cursor-column-on-screen) 1 input style)
            ; (flash-update-status)
            (set-status! (to-string "flash: " input " ; gutter: " gutter "; cursor: " cursor-column-on-screen "/" cursor-column-in-buffer "->" (first (first matches)) "/" (second (first matches)) "/" (third (first matches))))
