@@ -124,13 +124,11 @@
           [(< cols 0) (helix.static.move_char_left) (move-cursor-by rows (+ cols 1))]
           [else #t]))))
 
-(define (flash-get-lines-forward cursor-line-in-buffer)
+(define (flash-get-lines-forward cursor-line-in-buffer max-lines)
   (let*
     ([full-text (rope->string (editor->text (editor->doc-id (editor-focus))))]
      ; TODO: either skip the text before cursor and offset first line matches accordingly, or use an entire screen worth of text
-     ; TODO: limit the number of lines on the screen / in the buffer
-     ; [lines-on-screen (area-height rect)]
-     [lines (list-drop (split-many full-text "\n") cursor-line-in-buffer)] ;(map (lambda (n) (rope->string (rope->line full-text n))) (range cursor-line-in-buffer (+ 1 cursor-line-in-buffer (- lines-on-screen cursor-line-on-screen))))]
+     [lines (take (list-drop (split-many full-text "\n") cursor-line-in-buffer) max-lines)]
     )
     lines))
 
@@ -150,7 +148,7 @@
      [gutter (flash-get-gutter)]
      [label-style (style-with-bold (theme-scope "ui.cursor.match"))]
      [match-style (style-with-italics (theme-scope "ui.text.focus"))]
-     )
+     [input-len (string-length input)])
   (map
     (lambda (a)
       (let*
@@ -158,19 +156,19 @@
          [match-y (hash-ref a 'row)]
          [label (string (hash-ref a 'label))]
          [match-row (+ cursor-line-on-screen match-y)]
-         [match-col (+ gutter (string-length input) match-x)])
+         [match-col (+ gutter input-len match-x)])
          (begin
            (frame-set-string! frame match-col match-row label label-style)
            ; INFO: this works extremely poorly with wrapped lines (soft-wraps)
            ; TODO: need to account for gutter + line width + line-wrap string (character?) and accumulate over all lines
-           (map (lambda (x) (frame-set-string! frame (+ gutter match-x x) match-row (string (string-ref input x)) match-style)) (range (string-length input))))))
+           (map (lambda (x) (frame-set-string! frame (+ gutter match-x x) match-row (string (string-ref input x)) match-style)) (range input-len)))))
     matches)))
 
 (define (flash-render state rect frame)
   (let*
     ([cursor-line-in-buffer (helix.static.get-current-line-number)]
      [alphabet (flash-jump-label-alphabet)]
-     [lines (flash-get-lines-forward cursor-line-in-buffer)]
+     [lines (flash-get-lines-forward cursor-line-in-buffer (- (area-height rect) (position-row (flash-first-cursor-pos-on-screen))))]
      [input (hash-ref *flash-state* 'input)]
      [max-line-width (- (area-width rect) (flash-get-gutter) 1)])
     (if (> (string-length input) 0)
