@@ -1,4 +1,3 @@
-
 (require "helix/editor.scm")
 (require (prefix-in helix.commands. "helix/commands.scm"))
 (require (prefix-in helix.static. "helix/static.scm"))
@@ -233,6 +232,8 @@
 
 (define (flash-handle-cursor-event state event) #f)
 
+;;@doc
+; Prefix search and jump
 (define (flash)
   (begin
     (set! *flash-state* (default-flash-state))
