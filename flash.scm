@@ -17,8 +17,8 @@
         (find-matches-rec pattern (substring source p-len) (+ pos p-len) (append acc (list pos)))
         (find-matches-rec pattern (substring source 1) (+ pos 1) acc)))))
 
-(define (find-matches pattern source)
-  (find-matches-rec pattern source 0 '()))
+(define (find-matches pattern source offset)
+  (find-matches-rec pattern (if (number? offset) (substring source offset) source) (if (number? offset) offset 0) '()))
 
 (define (find-first f lst)
   (if (or (not (list? lst)) (empty? lst))
@@ -103,9 +103,19 @@
       [available-letters (filter (lambda (c) (not (hashset-contains? next-letters-set c))) alphabet)])
      (map (lambda (m) (hash-insert (first m) 'label (second m))) (zip matches available-letters))))
 
-(define (matches-and-labels input lines as max-line-length)
+(define (find-matches-with-offset input lines offset)
+  (if (or (not (list? lines)) (empty? lines))
+      '()
+      (let*
+        ([first-line (first lines)]
+         [rest-lines (rest lines)])
+         (if (number? offset)
+            (append (list (hash 'line first-line 'matches (find-matches input first-line offset))) (find-matches-with-offset input rest-lines #f))
+            (append (list (hash 'line first-line 'matches (find-matches input first-line #f))) (find-matches-with-offset input rest-lines #f))))))
+
+(define (matches-and-labels input lines as max-line-length initial-offset)
   (let*
-    ([lines-with-matches (map (lambda (l) (hash 'line l 'matches (find-matches input l))) lines)]
+    ([lines-with-matches (find-matches-with-offset input lines initial-offset)]
      [lines-with-positions (align-matches-with-softwraps max-line-length lines-with-matches)]
      [flat-matches (unpack-matches lines-with-positions)])
     (assign-labels flat-matches as)))
@@ -179,13 +189,14 @@
 (define (flash-render state rect frame)
   (let*
     ([cursor-line-in-buffer (helix.static.get-current-line-number)]
+     [cursor-column-in-buffer (helix.static.get-current-column-number)]
      [alphabet (flash-jump-label-alphabet)]
      [lines (flash-get-lines-forward cursor-line-in-buffer (- (area-height rect) (position-row (flash-first-cursor-pos-on-screen))))]
      [input (hash-ref *flash-state* 'input)]
      [max-line-width (- (area-width rect) (flash-get-gutter) 1)])
     (if (> (string-length input) 0)
         (let*
-          ([matches (matches-and-labels input lines alphabet max-line-width)])
+          ([matches (matches-and-labels input lines alphabet max-line-width (max (- cursor-column-in-buffer 1)))])
           (begin
            (flash-render-jump-labels frame matches input)
            (flash-update-status)
