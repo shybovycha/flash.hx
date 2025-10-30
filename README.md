@@ -6,7 +6,21 @@ This is a [Helix](https://helix-editor.com/) plugin similar to [flash.nvim](http
 
 ## Installation
 
-First you need to obtain a fork of Helix with a [working draft](https://github.com/helix-editor/helix/pull/8675) of a plugin system by cloning and building the corresponding [branch](https://github.com/mattwparas/helix/tree/steel-event-system).
+First you need to obtain a fork of Helix with a [working draft](https://github.com/helix-editor/helix/pull/8675) of a plugin system by cloning and building the corresponding [branch](https://github.com/mattwparas/helix/tree/steel-event-system). Note that you might have to enable a `steel` feature in `helix-term/Cargo.toml` file:
+
+```diff
+--- a/helix-term/Cargo.toml
++++ b/helix-term/Cargo.toml
+@@ -31,7 +31,7 @@ assets = [
+ ]
+
+ [features]
+-default = ["git"] # Add steel here for development
++default = ["git", "steel"] # Add steel here for development
+ unicode-lines = ["helix-core/unicode-lines", "helix-view/unicode-lines"]
+ integration = ["helix-event/integration_test"]
+ git = ["helix-vcs/git"]
+```
 
 Then you will be able to use the Scheme / [Steel](https://github.com/mattwparas/steel) configuration files in `~/.config/helix/` directory.
 You need to copy the `flash.scm` file from this repo to the `~/.config/helix/` directory add the following code to the `init.scm` file:
