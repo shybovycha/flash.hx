@@ -47,7 +47,7 @@
 
 (define softwrap-width 2)
 
-(define (align-matches-with-softwraps-sub width lines line-offset line-idx)
+(define (align-matches-with-softwraps-sub width lines direction line-offset line-idx)
   (if (empty? lines) 
     '()
     (let*
@@ -61,21 +61,22 @@
             (~> first-line
               (hash-insert 'matches (map (lambda (m) (hash 'row line-offset 'col m 'char-idx m)) matches))
               (hash-insert 'line-idx line-idx)))
-          (align-matches-with-softwraps-sub width (rest lines) (+ 1 line-offset) (+ 1 line-idx)))
+          (align-matches-with-softwraps-sub width (rest lines) direction (+ 1 line-offset) (if (equal? 'backward direction) (- line-idx 1) (+ 1 line-idx))))
         (append
           (list 
             (~> first-line
               ; TODO: softwrap happens on the edge of word and non-word character, making it non-uniform line width :sadpanda:
               (hash-insert 'matches (map (lambda (m) (hash 'char-idx m 'row (+ line-offset (floor (/ m width))) 'col (if (> m width) (+ softwrap-width (modulo m width)) m))) matches))
               (hash-insert 'line-idx line-idx)))
-          (align-matches-with-softwraps-sub width (rest lines) (+ (ceiling (/ len width)) line-offset) (+ 1 line-idx)))))))
+          (align-matches-with-softwraps-sub width (rest lines) direction (+ (ceiling (/ len width)) line-offset) (if (equal? 'backward direction) (- line-idx 1) (+ 1 line-idx))))))))
 
-(define (align-matches-with-softwraps width lines)
+(define (align-matches-with-softwraps width lines direction)
   (if (or (not (list? lines)) (empty? lines))
     #f
     (align-matches-with-softwraps-sub
       width
       lines
+      direction
       0
       0)))
 
@@ -111,22 +112,38 @@
       [available-letters (filter (lambda (c) (not (hashset-contains? next-letters-set c))) alphabet)])
      (map (lambda (m) (hash-insert (first m) 'label (second m))) (zip matches available-letters))))
 
-(define (find-matches-with-offset input lines offset)
+(define (find-matches-with-offset input lines offset direction)
   (if (or (not (list? lines)) (empty? lines))
       '()
       (let*
         ([first-line (first lines)]
          [rest-lines (rest lines)])
          (if (number? offset)
-            (append (list (hash 'line first-line 'matches (if (equal? 'backward (hash-ref *flash-state* 'direction)) (find-matches-backward input first-line offset) (find-matches-forward input first-line offset)))) (find-matches-with-offset input rest-lines #f))
-            (append (list (hash 'line first-line 'matches (if (equal? 'backward (hash-ref *flash-state* 'direction)) (find-matches-backward input first-line #f) (find-matches-forward input first-line #f)))) (find-matches-with-offset input rest-lines #f))))))
+            (append
+              (list
+                (hash
+                  'line first-line
+                  'matches (if (equal? 'backward direction)
+                    (find-matches-backward input first-line offset)
+                    (find-matches-forward input first-line offset))))
+              (find-matches-with-offset input rest-lines #f direction))
+            (append
+              (list
+                (hash
+                  'line first-line
+                  'matches (if (equal? 'backward direction)
+                               (find-matches-backward input first-line #f)
+                               (find-matches-forward input first-line #f))))
+              (find-matches-with-offset input rest-lines #f direction))))))
 
-(define (matches-and-labels input lines as max-line-length initial-offset)
+(define (matches-and-labels input lines max-line-length cursor-in-buffer cursor-on-screen direction)
   (let*
-    ([lines-with-matches (find-matches-with-offset input lines initial-offset)]
-     [lines-with-positions (align-matches-with-softwraps max-line-length lines-with-matches)]
+    ([initial-offset (if (equal? 'everywhere direction) #f (max 0 (- (position-col cursor-in-buffer) 1)))]
+     [alphabet (flash-jump-label-alphabet)]
+     [lines-with-matches (find-matches-with-offset input lines initial-offset direction)]
+     [lines-with-positions (align-matches-with-softwraps max-line-length lines-with-matches direction)]
      [flat-matches (unpack-matches lines-with-positions)])
-    (assign-labels flat-matches as)))
+    (assign-labels flat-matches alphabet)))
 
 (define (flash-first-cursor-pos-on-screen)
   (if (and (list? (current-cursor)) (not (empty? (current-cursor))) (Position? (first (current-cursor))))
@@ -219,10 +236,9 @@
         ([match-x (hash-ref a 'col)]
          [match-y (hash-ref a 'row)]
          [label (string (hash-ref a 'label))]
-         [match-row (if
-                    (equal? 'backward (hash-ref *flash-state* 'direction))
-                    (- cursor-line-on-screen match-y)
-                    (+ cursor-line-on-screen match-y))]
+         [match-row (if (equal? 'backward (hash-ref *flash-state* 'direction))
+                      (- cursor-line-on-screen match-y)
+                      (+ cursor-line-on-screen match-y))]
          [match-col (+ gutter input-len match-x)])
          (begin
            (frame-set-string! frame match-col match-row label label-style)
@@ -239,7 +255,6 @@
        [cursor-in-buffer (position cursor-line-in-buffer cursor-column-in-buffer)]
        [cursor-on-screen (flash-first-cursor-pos-on-screen)]
        [cursor-line-on-screen (position-row cursor-on-screen)]
-       [alphabet (flash-jump-label-alphabet)]
        [max-line-width (- (area-width rect) (flash-get-gutter) 1)]
        [direction (hash-ref *flash-state* 'direction)]
        [lines (cond
@@ -247,7 +262,7 @@
                 [(equal? 'forward direction) (flash-get-lines-forward cursor-in-buffer cursor-on-screen (area-height rect) max-line-width)]
                 [else (flash-get-lines-on-screen cursor-in-buffer cursor-on-screen (area-height rect) max-line-width)])]
        [input (hash-ref *flash-state* 'input)]
-       [matches (matches-and-labels input lines alphabet max-line-width (if (equal? 'everywhere direction) #f (max 0 (- cursor-column-in-buffer 1))))])
+       [matches (matches-and-labels input lines max-line-width cursor-in-buffer cursor-on-screen direction)])
       (begin
        (flash-render-jump-labels frame matches input)
        (flash-update-status)
@@ -283,10 +298,7 @@
        (if found-match
           (begin
             (set-status! "")
-            (helix.commands.goto-line (if (equal? 'backward (hash-ref *flash-state* 'direction))
-                                          (- (+ 1 (helix.static.get-current-line-number)) (hash-ref found-match 'line-idx))
-                                          (+ (+ 1 (helix.static.get-current-line-number)) (hash-ref found-match 'line-idx)))
-                                      (equal? (editor-mode) "select"))
+            (helix.commands.goto-line (+ 1 (helix.static.get-current-line-number) (hash-ref found-match 'line-idx)) (equal? (editor-mode) "select"))
             (helix.commands.goto-column (+ (max 0 (- (string-length (hash-ref *flash-state* 'input)) 1)) (hash-ref found-match 'char-idx)) (equal? (editor-mode) "select"))
             event-result/close)
           (begin
