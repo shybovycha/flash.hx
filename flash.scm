@@ -125,9 +125,12 @@
            (first (current-cursor))
            #f))
 
-; INFO: reading from config does not work https://github.com/helix-editor/helix/pull/8675/commits/b7725c818708369cb42f03538625d2bbea01a948
 (define (flash-jump-label-alphabet)
-  (map integer->char (range (char->integer #\a) (char->integer #\z))))
+  (let*
+    ([configured-alphabet (get-config-option-value "jump-label-alphabet")])
+    (if (or (not (string? configured-alphabet)) (not (> (string-length configured-alphabet) 0)))
+        (map integer->char (range (char->integer #\a) (char->integer #\z)))
+        configured-alphabet)))
 
 ; INFO: moving cursor to a specified position is impossible otherwise
 ; INFO: this does not work:
@@ -196,7 +199,7 @@
      [max-line-width (- (area-width rect) (flash-get-gutter) 1)])
     (if (> (string-length input) 0)
         (let*
-          ([matches (matches-and-labels input lines alphabet max-line-width (max (- cursor-column-in-buffer 1)))])
+          ([matches (matches-and-labels input lines alphabet max-line-width (max 0 (- cursor-column-in-buffer 1)))])
           (begin
            (flash-render-jump-labels frame matches input)
            (flash-update-status)
