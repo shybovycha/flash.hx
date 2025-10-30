@@ -4,6 +4,7 @@
 (require "helix/components.scm")
 (require "helix/misc.scm")
 (require "helix/configuration.scm")
+(require "helix/ext.scm")
 (require-builtin helix/core/text)
 (require-builtin steel/lists)
 (require-builtin steel/strings)
@@ -132,23 +133,6 @@
         (map integer->char (range (char->integer #\a) (char->integer #\z)))
         configured-alphabet)))
 
-; INFO: moving cursor to a specified position is impossible otherwise
-; INFO: this does not work:
-; (set! *flash-state* (hash-insert *flash-state* 'cursor-to-be '(3 3)))
-; INFO: there is no reasonable way to move cursor to a position and then pop the component
-; (helix.static.goto_line (first found-match)) ; goto_line does not have arguments... WAT?!
-; (helix.static.goto_column (second found-match)) ; goto_column also does not have arguments. WAT?!
-(define (move-cursor-by rows cols)
-  (if (and (= 0 rows) (= 0 cols))
-      #t
-      (begin
-        (cond
-          [(> rows 0) (helix.static.move_line_down) (move-cursor-by (- rows 1) cols)]
-          [(< rows 0) (helix.static.move_line_up) (move-cursor-by (+ rows 1) cols)]
-          [(> cols 0) (helix.static.move_char_right) (move-cursor-by rows (- cols 1))]
-          [(< cols 0) (helix.static.move_char_left) (move-cursor-by rows (+ cols 1))]
-          [else #t]))))
-
 (define (flash-get-lines-forward cursor-line-in-buffer max-lines)
   (let*
     ([full-text (rope->string (editor->text (editor->doc-id (editor-focus))))]
@@ -234,8 +218,9 @@
         [found-match (find-first (lambda (m) (char=? key-char (hash-ref m 'label))) matches)])
        (if found-match
           (begin
-            (move-cursor-by (hash-ref found-match 'line-idx) (+ (- (hash-ref found-match 'char-idx) (helix.static.get-current-column-number)) 1))
             (set-status! "")
+            (helix.commands.goto-line (+ 1 (helix.static.get-current-line-number) (hash-ref found-match 'line-idx)))
+            (helix.commands.goto-column (+ (max 0 (- (string-length (hash-ref *flash-state* 'input)) 1)) (hash-ref found-match 'char-idx)))
             event-result/close)
           (begin
             (flash-append-input-char key-char)
