@@ -34,7 +34,7 @@
 
 ;; ----------------------------------------
 
-(define (default-flash-state) (hash 'input "" 'cursor-to-be #f 'matches '()))
+(define (default-flash-state) (hash 'input "" 'matches '()))
 (define *flash-state* (default-flash-state))
 
 (define (flash-update-status)
