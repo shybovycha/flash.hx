@@ -2,6 +2,8 @@
 
 This is a [Helix](https://helix-editor.com/) plugin similar to [flash.nvim](https://github.com/folke/flash.nvim) and [leap.nvim](https://github.com/ggandor/leap.nvim).
 
+This plugin uses single-letter jump labels, unlike the default behaviour of `goto_word` (<kbd>g</kbd> <kbd>w</kbd>) which uses two-letter labels.
+
 [output.webm](https://github.com/user-attachments/assets/e3f4e757-fbf3-43eb-8e6a-e4c96eab0c97)
 
 ## Installation
@@ -38,12 +40,15 @@ But it is much more handy if you register a keyboard shortcut in the `init.scm`:
 
 Then you can access the functionality using <kbd>g</kbd> <kbd>/</kbd>.
 
+## Configuration
+
+The list of labels could be configured using the existing `jump-label-alphabet` config option under the `[editor]` section in the `~/.config/helix/config.toml` file.
+
 ## Known limitations
 
 Currently, there are quite a few limitations in this plugin, most of them due to a work-in-progress nature of the plugin system:
 
 * plugin only works in normal mode (visual mode is not supported)
 * it only supports forward lookups from the cursor line (but it is possible to alter the implementation to perform lookups on the entire screen or backwards from the cursor line)
-* no configuration is provided (since there is no API in the plugin system to query the config file)
 * there might be bugs and glitches (the implementation is rather convoluted due to many other limitations of the plugin system and Steel language)
 
