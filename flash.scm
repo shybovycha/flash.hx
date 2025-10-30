@@ -18,8 +18,11 @@
         (find-matches-rec pattern (substring source p-len) (+ pos p-len) (append acc (list pos)))
         (find-matches-rec pattern (substring source 1) (+ pos 1) acc)))))
 
-(define (find-matches pattern source offset)
+(define (find-matches-forward pattern source offset)
   (find-matches-rec pattern (if (number? offset) (substring source offset) source) (if (number? offset) offset 0) '()))
+
+(define (find-matches-backward pattern source offset)
+  (find-matches-rec pattern (if (number? offset) (substring source 0 offset) source) 0 '()))
 
 (define (find-first f lst)
   (if (or (not (list? lst)) (empty? lst))
@@ -35,7 +38,7 @@
 
 ;; ----------------------------------------
 
-(define (default-flash-state) (hash 'input "" 'matches '()))
+(define (default-flash-state) (hash 'input "" 'matches '() 'direction 'backward))
 (define *flash-state* (default-flash-state))
 
 (define (flash-update-status)
@@ -70,7 +73,11 @@
 (define (align-matches-with-softwraps width lines)
   (if (or (not (list? lines)) (empty? lines))
     #f
-    (align-matches-with-softwraps-sub width lines 0 0)))
+    (align-matches-with-softwraps-sub
+      width
+      lines
+      0
+      0)))
 
 (define (unpack-matches-sub entries acc)
   (if (empty? entries)
@@ -111,8 +118,8 @@
         ([first-line (first lines)]
          [rest-lines (rest lines)])
          (if (number? offset)
-            (append (list (hash 'line first-line 'matches (find-matches input first-line offset))) (find-matches-with-offset input rest-lines #f))
-            (append (list (hash 'line first-line 'matches (find-matches input first-line #f))) (find-matches-with-offset input rest-lines #f))))))
+            (append (list (hash 'line first-line 'matches (if (equal? 'backward (hash-ref *flash-state* 'direction)) (find-matches-backward input first-line offset) (find-matches-forward input first-line offset)))) (find-matches-with-offset input rest-lines #f))
+            (append (list (hash 'line first-line 'matches (if (equal? 'backward (hash-ref *flash-state* 'direction)) (find-matches-backward input first-line #f) (find-matches-forward input first-line #f)))) (find-matches-with-offset input rest-lines #f))))))
 
 (define (matches-and-labels input lines as max-line-length initial-offset)
   (let*
@@ -145,13 +152,41 @@
           line-width))))
 
 (define (flash-pick-lines-forward lines cursor-in-buffer cursor-on-screen max-lines line-width)
-  (flash-pick-lines-forward-sub (drop lines (position-row cursor-in-buffer)) (floor (/ (position-col cursor-on-screen) line-width)) max-lines line-width))
+  (let*
+    ([lines2 (drop lines (position-row cursor-in-buffer))]
+     [offset (floor (/ (position-col cursor-on-screen) line-width))])
+    (flash-pick-lines-forward-sub lines2 offset max-lines line-width)))
+
+(define (flash-pick-lines-backward-sub lines offset max-lines line-width)
+  (if (or (>= offset max-lines) (empty? lines))
+      '()
+      (append
+        (list (first lines))
+        (flash-pick-lines-backward-sub
+          (rest lines)
+          (+ offset (ceiling (/ (max 1 (string-length (first lines))))))
+          max-lines
+          line-width))))
+
+(define (flash-pick-lines-backward lines cursor-in-buffer cursor-on-screen max-lines line-width)
+  (let*
+    ([lines2 (reverse (take lines (+ 1 (position-row cursor-in-buffer))))]
+     [trimmed-lines (append (list (substring (first lines2) 0 (position-col cursor-in-buffer))) (rest lines2))]
+     [offset (floor (/ (position-col cursor-on-screen) line-width))]
+     [max-lines (- max-lines (position-row cursor-on-screen))])
+    (flash-pick-lines-backward-sub trimmed-lines offset max-lines line-width)))
 
 (define (flash-get-lines-forward cursor-in-buffer cursor-on-screen max-lines line-width)
   (let*
     ([full-text (rope->string (editor->text (editor->doc-id (editor-focus))))]
      [lines (split-many full-text "\n")])
     (flash-pick-lines-forward lines cursor-in-buffer cursor-on-screen max-lines line-width)))
+
+(define (flash-get-lines-backward cursor-in-buffer cursor-on-screen max-lines line-width)
+  (let*
+    ([full-text (rope->string (editor->text (editor->doc-id (editor-focus))))]
+     [lines (split-many full-text "\n")])
+    (flash-pick-lines-backward lines cursor-in-buffer cursor-on-screen max-lines line-width)))
 
 (define (flash-get-gutter)
   (let*
@@ -176,7 +211,10 @@
         ([match-x (hash-ref a 'col)]
          [match-y (hash-ref a 'row)]
          [label (string (hash-ref a 'label))]
-         [match-row (+ cursor-line-on-screen match-y)]
+         [match-row (if
+                    (equal? 'backward (hash-ref *flash-state* 'direction))
+                    (- cursor-line-on-screen match-y)
+                    (+ cursor-line-on-screen match-y))]
          [match-col (+ gutter input-len match-x)])
          (begin
            (frame-set-string! frame match-col match-row label label-style)
@@ -194,7 +232,10 @@
      [cursor-line-on-screen (position-row cursor-on-screen)]
      [alphabet (flash-jump-label-alphabet)]
      [max-line-width (- (area-width rect) (flash-get-gutter) 1)]
-     [lines (flash-get-lines-forward cursor-in-buffer cursor-on-screen (area-height rect) max-line-width)]
+     [lines (if
+            (equal? 'backward (hash-ref *flash-state* 'direction))
+            (flash-get-lines-backward cursor-in-buffer cursor-on-screen (area-height rect) max-line-width)
+            (flash-get-lines-forward cursor-in-buffer cursor-on-screen (area-height rect) max-line-width))]
      [input (hash-ref *flash-state* 'input)])
     (if (> (string-length input) 0)
         (let*
@@ -234,7 +275,10 @@
        (if found-match
           (begin
             (set-status! "")
-            (helix.commands.goto-line (+ 1 (helix.static.get-current-line-number) (hash-ref found-match 'line-idx)) (equal? (editor-mode) "select"))
+            (helix.commands.goto-line (if (equal? 'backward (hash-ref *flash-state* 'direction))
+                                          (- (+ 1 (helix.static.get-current-line-number)) (hash-ref found-match 'line-idx))
+                                          (+ (helix.static.get-current-line-number) (hash-ref found-match 'line-idx)))
+                                      (equal? (editor-mode) "select"))
             (helix.commands.goto-column (+ (max 0 (- (string-length (hash-ref *flash-state* 'input)) 1)) (hash-ref found-match 'char-idx)) (equal? (editor-mode) "select"))
             event-result/close)
           (begin
