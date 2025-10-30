@@ -133,13 +133,25 @@
         (map integer->char (range (char->integer #\a) (char->integer #\z)))
         configured-alphabet)))
 
-(define (flash-get-lines-forward cursor-line-in-buffer max-lines)
+(define (flash-pick-lines-forward-sub lines offset max-lines line-width)
+  (if (or (>= offset max-lines) (empty? lines))
+      '()
+      (append
+        (list (first lines))
+        (flash-pick-lines-forward-sub
+          (rest lines)
+          (+ offset (ceiling (/ (max 1 (string-length (first lines))) line-width)))
+          max-lines
+          line-width))))
+
+(define (flash-pick-lines-forward lines cursor-in-buffer cursor-on-screen max-lines line-width)
+  (flash-pick-lines-forward-sub (drop lines (position-row cursor-in-buffer)) (floor (/ (position-col cursor-on-screen) line-width)) max-lines line-width))
+
+(define (flash-get-lines-forward cursor-in-buffer cursor-on-screen max-lines line-width)
   (let*
     ([full-text (rope->string (editor->text (editor->doc-id (editor-focus))))]
-     ; TODO: either skip the text before cursor and offset first line matches accordingly, or use an entire screen worth of text
-     [lines (take (list-drop (split-many full-text "\n") cursor-line-in-buffer) max-lines)]
-    )
-    lines))
+     [lines (split-many full-text "\n")])
+    (flash-pick-lines-forward lines cursor-in-buffer cursor-on-screen max-lines line-width)))
 
 (define (flash-get-gutter)
   (let*
@@ -177,10 +189,13 @@
   (let*
     ([cursor-line-in-buffer (helix.static.get-current-line-number)]
      [cursor-column-in-buffer (helix.static.get-current-column-number)]
+     [cursor-in-buffer (position cursor-line-in-buffer cursor-column-in-buffer)]
+     [cursor-on-screen (flash-first-cursor-pos-on-screen)]
+     [cursor-line-on-screen (position-row cursor-on-screen)]
      [alphabet (flash-jump-label-alphabet)]
-     [lines (flash-get-lines-forward cursor-line-in-buffer (- (area-height rect) (position-row (flash-first-cursor-pos-on-screen))))]
-     [input (hash-ref *flash-state* 'input)]
-     [max-line-width (- (area-width rect) (flash-get-gutter) 1)])
+     [max-line-width (- (area-width rect) (flash-get-gutter) 1)]
+     [lines (flash-get-lines-forward cursor-in-buffer cursor-on-screen (area-height rect) max-line-width)]
+     [input (hash-ref *flash-state* 'input)])
     (if (> (string-length input) 0)
         (let*
           ([matches (matches-and-labels input lines alphabet max-line-width (max 0 (- cursor-column-in-buffer 1)))])
