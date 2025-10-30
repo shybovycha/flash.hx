@@ -48,7 +48,6 @@ The list of labels could be configured using the existing `jump-label-alphabet` 
 
 Currently, there are quite a few limitations in this plugin, most of them due to a work-in-progress nature of the plugin system:
 
-* plugin only works in normal mode (visual mode is not supported)
 * it only supports forward lookups from the cursor line (but it is possible to alter the implementation to perform lookups on the entire screen or backwards from the cursor line)
 * there might be bugs and glitches (the implementation is rather convoluted due to many other limitations of the plugin system and Steel language)
 
