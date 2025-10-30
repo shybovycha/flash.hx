@@ -121,23 +121,11 @@
             (append (list (hash 'line first-line 'matches (if (equal? 'backward (hash-ref *flash-state* 'direction)) (find-matches-backward input first-line offset) (find-matches-forward input first-line offset)))) (find-matches-with-offset input rest-lines #f))
             (append (list (hash 'line first-line 'matches (if (equal? 'backward (hash-ref *flash-state* 'direction)) (find-matches-backward input first-line #f) (find-matches-forward input first-line #f)))) (find-matches-with-offset input rest-lines #f))))))
 
-; (define (fix-rows-for-cursor-line matches cursor-on-screen cursor-in-buffer)
-;   (map
-;     (lambda (x)
-;             (let*
-;               ([row (hash-ref x 'row)]
-;                [line-idx (hash-ref x 'line-idx)]
-;                [new-row (if (< row (position-row cursor-on-screen)) )])
-;               ()~> x (hash-insert 'row )))
-;     matches))
-
 (define (matches-and-labels input lines as max-line-length initial-offset)
   (let*
     ([lines-with-matches (find-matches-with-offset input lines initial-offset)]
      [lines-with-positions (align-matches-with-softwraps max-line-length lines-with-matches)]
-     [flat-matches (unpack-matches lines-with-positions)]
-     ; [fixed-rows (if (equal? 'everywhere (hash-ref *flash-state* 'direction)) (fix-rows-for-cursor-line flat-matches cursor-on-screen cursor-in-buffer) flat-matches)])
-    )
+     [flat-matches (unpack-matches lines-with-positions)])
     (assign-labels flat-matches as)))
 
 (define (flash-first-cursor-pos-on-screen)
@@ -244,27 +232,26 @@
     matches)))
 
 (define (flash-render state rect frame)
-  (let*
-    ([cursor-line-in-buffer (helix.static.get-current-line-number)]
-     [cursor-column-in-buffer (helix.static.get-current-column-number)]
-     [cursor-in-buffer (position cursor-line-in-buffer cursor-column-in-buffer)]
-     [cursor-on-screen (flash-first-cursor-pos-on-screen)]
-     [cursor-line-on-screen (position-row cursor-on-screen)]
-     [alphabet (flash-jump-label-alphabet)]
-     [max-line-width (- (area-width rect) (flash-get-gutter) 1)]
-     [direction (hash-ref *flash-state* 'direction)]
-     [lines (cond
-              [(equal? 'backward direction) (flash-get-lines-backward cursor-in-buffer cursor-on-screen (area-height rect) max-line-width)]
-              [(equal? 'forward direction) (flash-get-lines-forward cursor-in-buffer cursor-on-screen (area-height rect) max-line-width)]
-              [else (flash-get-lines-on-screen cursor-in-buffer cursor-on-screen (area-height rect) max-line-width)])]
-     [input (hash-ref *flash-state* 'input)])
-    (if (> (string-length input) 0)
-        (let*
-          ([matches (matches-and-labels input lines alphabet max-line-width (if (equal? 'everywhere (hash-ref *flash-state* 'direction)) #f (max 0 (- cursor-column-in-buffer 1))))])
-          (begin
-           (flash-render-jump-labels frame matches input)
-           (flash-update-status)
-           (set! *flash-state* (hash-insert *flash-state* 'matches matches)))))))
+  (if (> (string-length (hash-ref *flash-state* 'input)) 0)
+    (let*
+      ([cursor-line-in-buffer (helix.static.get-current-line-number)]
+       [cursor-column-in-buffer (helix.static.get-current-column-number)]
+       [cursor-in-buffer (position cursor-line-in-buffer cursor-column-in-buffer)]
+       [cursor-on-screen (flash-first-cursor-pos-on-screen)]
+       [cursor-line-on-screen (position-row cursor-on-screen)]
+       [alphabet (flash-jump-label-alphabet)]
+       [max-line-width (- (area-width rect) (flash-get-gutter) 1)]
+       [direction (hash-ref *flash-state* 'direction)]
+       [lines (cond
+                [(equal? 'backward direction) (flash-get-lines-backward cursor-in-buffer cursor-on-screen (area-height rect) max-line-width)]
+                [(equal? 'forward direction) (flash-get-lines-forward cursor-in-buffer cursor-on-screen (area-height rect) max-line-width)]
+                [else (flash-get-lines-on-screen cursor-in-buffer cursor-on-screen (area-height rect) max-line-width)])]
+       [input (hash-ref *flash-state* 'input)]
+       [matches (matches-and-labels input lines alphabet max-line-width (if (equal? 'everywhere direction) #f (max 0 (- cursor-column-in-buffer 1))))])
+      (begin
+       (flash-render-jump-labels frame matches input)
+       (flash-update-status)
+       (set! *flash-state* (hash-insert *flash-state* 'matches matches))))))
 
 (define (flash-remove-last-input-char)
   (let*
@@ -325,7 +312,7 @@
 ; Prefix search on screen and jump
 (define (flash)
   (begin
-    (set! *flash-state* (hash-insert (default-flash-state) 'direction 'forward))
+    (set! *flash-state* (hash-insert (default-flash-state) 'direction 'everywhere))
     (set-status! "flash:")
     (flash-init)))
 
