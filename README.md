@@ -4,7 +4,7 @@ This is a [Helix](https://helix-editor.com/) plugin similar to [flash.nvim](http
 
 This plugin uses single-letter jump labels, unlike the default behaviour of `goto_word` (<kbd>g</kbd> <kbd>w</kbd>) which uses two-letter labels.
 
-[output.webm](https://github.com/user-attachments/assets/e3f4e757-fbf3-43eb-8e6a-e4c96eab0c97)
+[output.webm](https://github.com/user-attachments/assets/9cbadc35-9791-4c0a-ae86-abcbb4ffad2f)
 
 ## Installation
 
