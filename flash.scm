@@ -231,20 +231,23 @@
 
 (define (flash-handle-cursor-event state event) #f)
 
-;;@doc
-; Prefix search and jump
-(define (flash)
-  (begin
-    (set! *flash-state* (default-flash-state))
-    (set-status! "flash:")
-    (push-component!
+(define (flash-init)
+  (push-component!
       (new-component!
         "flash"
         *flash-state*
         flash-render
         (hash
           "handle_event" flash-handle-event
-          "cursor" flash-handle-cursor-event)))))
+          "cursor" flash-handle-cursor-event))))
+
+;;@doc
+; Prefix search and jump
+(define (flash)
+  (begin
+    (set! *flash-state* (default-flash-state))
+    (set-status! "flash:")
+    (flash-init)))
 
 (provide flash)
 
