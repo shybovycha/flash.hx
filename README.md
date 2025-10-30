@@ -4,10 +4,11 @@ This is a [Helix](https://helix-editor.com/) plugin similar to [flash.nvim](http
 
 This plugin uses single-letter jump labels, unlike the default behaviour of `goto_word` (<kbd>g</kbd> <kbd>w</kbd>) which uses two-letter labels.
 
-[output.webm](https://github.com/user-attachments/assets/9cbadc35-9791-4c0a-ae86-abcbb4ffad2f)
+[output.webm](https://github.com/user-attachments/assets/65285c2e-0862-4fdc-951e-7f99f6c8d30b)
 
 ## Installation
 
+### Prerequisites
 First you need to obtain a fork of Helix with a [working draft](https://github.com/helix-editor/helix/pull/8675) of a plugin system by cloning and building the corresponding [branch](https://github.com/mattwparas/helix/tree/steel-event-system). Note that you might have to enable a `steel` feature in `helix-term/Cargo.toml` file:
 
 ```diff
@@ -25,6 +26,9 @@ First you need to obtain a fork of Helix with a [working draft](https://github.c
 ```
 
 Then you will be able to use the Scheme / [Steel](https://github.com/mattwparas/steel) configuration files in `~/.config/helix/` directory.
+
+### Installing this plugin
+
 You need to copy the `flash.scm` file from this repo to the `~/.config/helix/` directory add the following code to the `init.scm` file:
 
 ```scheme
@@ -49,5 +53,5 @@ The list of labels could be configured using the existing `jump-label-alphabet` 
 Currently, there are quite a few limitations in this plugin, most of them due to a work-in-progress nature of the plugin system:
 
 * it only supports forward lookups from the cursor line (but it is possible to alter the implementation to perform lookups on the entire screen or backwards from the cursor line)
-* there might be bugs and glitches (the implementation is rather convoluted due to many other limitations of the plugin system and Steel language)
+* there might be bugs and glitches (the implementation is rather convoluted due to many other limitations of the plugin system, the Steel language and my skill with both)
 
