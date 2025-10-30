@@ -38,7 +38,7 @@
 
 ;; ----------------------------------------
 
-(define (default-flash-state) (hash 'input "" 'matches '() 'direction 'backward))
+(define (default-flash-state) (hash 'input "" 'matches '() 'direction 'forward))
 (define *flash-state* (default-flash-state))
 
 (define (flash-update-status)
@@ -121,11 +121,23 @@
             (append (list (hash 'line first-line 'matches (if (equal? 'backward (hash-ref *flash-state* 'direction)) (find-matches-backward input first-line offset) (find-matches-forward input first-line offset)))) (find-matches-with-offset input rest-lines #f))
             (append (list (hash 'line first-line 'matches (if (equal? 'backward (hash-ref *flash-state* 'direction)) (find-matches-backward input first-line #f) (find-matches-forward input first-line #f)))) (find-matches-with-offset input rest-lines #f))))))
 
+; (define (fix-rows-for-cursor-line matches cursor-on-screen cursor-in-buffer)
+;   (map
+;     (lambda (x)
+;             (let*
+;               ([row (hash-ref x 'row)]
+;                [line-idx (hash-ref x 'line-idx)]
+;                [new-row (if (< row (position-row cursor-on-screen)) )])
+;               ()~> x (hash-insert 'row )))
+;     matches))
+
 (define (matches-and-labels input lines as max-line-length initial-offset)
   (let*
     ([lines-with-matches (find-matches-with-offset input lines initial-offset)]
      [lines-with-positions (align-matches-with-softwraps max-line-length lines-with-matches)]
-     [flat-matches (unpack-matches lines-with-positions)])
+     [flat-matches (unpack-matches lines-with-positions)]
+     ; [fixed-rows (if (equal? 'everywhere (hash-ref *flash-state* 'direction)) (fix-rows-for-cursor-line flat-matches cursor-on-screen cursor-in-buffer) flat-matches)])
+    )
     (assign-labels flat-matches as)))
 
 (define (flash-first-cursor-pos-on-screen)
@@ -188,6 +200,14 @@
      [lines (split-many full-text "\n")])
     (flash-pick-lines-backward lines cursor-in-buffer cursor-on-screen max-lines line-width)))
 
+(define (flash-get-lines-on-screen cursor-in-buffer cursor-on-screen screen-height line-width)
+  (let*
+    ([full-text (rope->string (editor->text (editor->doc-id (editor-focus))))]
+     [lines (split-many full-text "\n")]
+     [lines-back (flash-pick-lines-backward lines cursor-in-buffer cursor-on-screen screen-height line-width)]
+     [lines-forward (flash-pick-lines-forward lines cursor-in-buffer cursor-on-screen screen-height line-width)])
+    (append lines-back lines-forward)))
+
 (define (flash-get-gutter)
   (let*
     ([cursor-on-screen (flash-first-cursor-pos-on-screen)]
@@ -232,14 +252,15 @@
      [cursor-line-on-screen (position-row cursor-on-screen)]
      [alphabet (flash-jump-label-alphabet)]
      [max-line-width (- (area-width rect) (flash-get-gutter) 1)]
-     [lines (if
-            (equal? 'backward (hash-ref *flash-state* 'direction))
-            (flash-get-lines-backward cursor-in-buffer cursor-on-screen (area-height rect) max-line-width)
-            (flash-get-lines-forward cursor-in-buffer cursor-on-screen (area-height rect) max-line-width))]
+     [direction (hash-ref *flash-state* 'direction)]
+     [lines (cond
+              [(equal? 'backward direction) (flash-get-lines-backward cursor-in-buffer cursor-on-screen (area-height rect) max-line-width)]
+              [(equal? 'forward direction) (flash-get-lines-forward cursor-in-buffer cursor-on-screen (area-height rect) max-line-width)]
+              [else (flash-get-lines-on-screen cursor-in-buffer cursor-on-screen (area-height rect) max-line-width)])]
      [input (hash-ref *flash-state* 'input)])
     (if (> (string-length input) 0)
         (let*
-          ([matches (matches-and-labels input lines alphabet max-line-width (max 0 (- cursor-column-in-buffer 1)))])
+          ([matches (matches-and-labels input lines alphabet max-line-width (if (equal? 'everywhere (hash-ref *flash-state* 'direction)) #f (max 0 (- cursor-column-in-buffer 1))))])
           (begin
            (flash-render-jump-labels frame matches input)
            (flash-update-status)
@@ -277,7 +298,7 @@
             (set-status! "")
             (helix.commands.goto-line (if (equal? 'backward (hash-ref *flash-state* 'direction))
                                           (- (+ 1 (helix.static.get-current-line-number)) (hash-ref found-match 'line-idx))
-                                          (+ (helix.static.get-current-line-number) (hash-ref found-match 'line-idx)))
+                                          (+ (+ 1 (helix.static.get-current-line-number)) (hash-ref found-match 'line-idx)))
                                       (equal? (editor-mode) "select"))
             (helix.commands.goto-column (+ (max 0 (- (string-length (hash-ref *flash-state* 'input)) 1)) (hash-ref found-match 'char-idx)) (equal? (editor-mode) "select"))
             event-result/close)
@@ -301,12 +322,30 @@
           "cursor" flash-handle-cursor-event))))
 
 ;;@doc
-; Prefix search and jump
+; Prefix search on screen and jump
 (define (flash)
   (begin
-    (set! *flash-state* (default-flash-state))
+    (set! *flash-state* (hash-insert (default-flash-state) 'direction 'forward))
     (set-status! "flash:")
     (flash-init)))
 
-(provide flash)
+;;@doc
+; Prefix search backward and jump
+(define (flash-backward)
+  (begin
+    (set! *flash-state* (hash-insert (default-flash-state) 'direction 'backward))
+    (set-status! "flash-back:")
+    (flash-init)))
+
+;;@doc
+; Prefix search forward and jump
+(define (flash-forward)
+  (begin
+    (set! *flash-state* (hash-insert (default-flash-state) 'direction 'forward))
+    (set-status! "flash-forward:")
+    (flash-init)))
+
+(provide flash
+         flash-backward
+         flash-forward)
 
