@@ -41,6 +41,13 @@ Upon reloading Helix (the one built from the plugin system branch), you will be 
 * `:flash-forward` - performs search starting from the current cursor (or just the first one if there are multiple) downwards
 * `:flash-backward` - performs search from the top of the screen to the current cursor (or the first one if there are multiple)
 
+The above three commands will _move the cursor_ in `normal` mode and _extend selection_ in `selection` mode.
+There are also overrides to only extend selection:
+
+* `:flash-extend` - performs search on the entire screen and extends selection to the jump label
+* `:flash-extend-forward` - performs search starting from the first cursor downwards and extends selection to the jump label
+* `:flash-extend-backward` - performs search starting from the first cursor upwards and extends selection to the jump label
+
 But it is much more handy if you register keyboard shortcuts in the `init.scm`:
 
 ```scheme

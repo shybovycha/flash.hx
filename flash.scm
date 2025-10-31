@@ -38,18 +38,21 @@
 
 ;; ----------------------------------------
 
-(define (default-flash-state) (hash 'input "" 'matches '() 'direction 'forward))
+(define (default-flash-state) (hash 'input "" 'matches '() 'direction 'forward 'extend #f))
 (define *flash-state* (default-flash-state))
 
 (define (flash-update-status)
   (let*
     ([input (hash-ref *flash-state* 'input)]
      [direction (hash-ref *flash-state* 'direction)]
+     [should-extend (hash-ref *flash-state* 'extend)]
      [direction-s (cond
-                    [(equal? 'backward direction) "flash [backward]:"]
-                    [(equal? 'forward direction) "flash [forward]:"]
-                    [else "flash:"])])
-    (set-status! (to-string direction-s input))))
+                    [(equal? 'backward direction) "[backward]"]
+                    [(equal? 'forward direction) "[forward]"]
+                    [else #f])]
+     [extend-s (if should-extend "[extend]" #f)]
+     [status (string-append (string-join (filter (lambda (x) x) (list "flash" direction-s extend-s)) " ") ":")])
+    (set-status! (to-string status input))))
 
 (define softwrap-width 2)
 
@@ -343,12 +346,13 @@
     [(char? key-char)
      (let*
        ([matches (hash-ref *flash-state* 'matches)]
-        [found-match (find-first (lambda (m) (char=? key-char (hash-ref m 'label))) matches)])
+        [found-match (find-first (lambda (m) (char=? key-char (hash-ref m 'label))) matches)]
+        [should-extend (hash-ref *flash-state* 'extend)])
        (if found-match
           (begin
             (set-status! "")
-            (helix.commands.goto-line (+ 1 (helix.static.get-current-line-number) (hash-ref found-match 'line-idx)) (equal? (editor-mode) "select"))
-            (helix.commands.goto-column (+ (max 0 (- (string-length (hash-ref *flash-state* 'input)) 1)) (hash-ref found-match 'char-idx)) (equal? (editor-mode) "select"))
+            (helix.commands.goto-line (+ 1 (helix.static.get-current-line-number) (hash-ref found-match 'line-idx)) should-extend)
+            (helix.commands.goto-column (+ (max 0 (- (string-length (hash-ref *flash-state* 'input)) 1)) (hash-ref found-match 'char-idx)) should-extend)
             event-result/close)
           (begin
             (flash-append-input-char key-char)
@@ -373,7 +377,11 @@
 ; Prefix search on screen and jump
 (define (flash)
   (begin
-    (set! *flash-state* (hash-insert (default-flash-state) 'direction 'everywhere))
+    (set! *flash-state*
+      (~>
+        (default-flash-state)
+        (hash-insert 'direction 'everywhere)
+        (hash-insert 'extend (equal? (editor-mode) "select"))))
     (set-status! "flash:")
     (flash-init)))
 
@@ -381,7 +389,11 @@
 ; Prefix search backward and jump
 (define (flash-backward)
   (begin
-    (set! *flash-state* (hash-insert (default-flash-state) 'direction 'backward))
+    (set! *flash-state*
+      (~>
+        (default-flash-state)
+        (hash-insert 'direction 'backward)
+        (hash-insert 'extend (equal? (editor-mode) "select"))))
     (set-status! "flash [backward]:")
     (flash-init)))
 
@@ -389,11 +401,48 @@
 ; Prefix search forward and jump
 (define (flash-forward)
   (begin
-    (set! *flash-state* (hash-insert (default-flash-state) 'direction 'forward))
+    (set! *flash-state*
+      (~>
+        (default-flash-state)
+        (hash-insert 'direction 'forward)
+        (hash-insert 'extend (equal? (editor-mode) "select"))))
     (set-status! "flash [forward]:")
+    (flash-init)))
+
+(define (flash-extend)
+  (begin
+    (set! *flash-state*
+      (~>
+        (default-flash-state)
+        (hash-insert 'direction 'everywhere)
+        (hash-insert 'extend #t)))
+    (set-status! "flash [forward] [extend]:")
+    (flash-init)))
+
+(define (flash-extend-forward)
+  (begin
+    (set! *flash-state*
+      (~>
+        (default-flash-state)
+        (hash-insert 'direction 'forward)
+        (hash-insert 'extend #t)))
+    (set-status! "flash [forward] [extend]:")
+    (flash-init)))
+
+(define (flash-extend-backward)
+  (begin
+    (set! *flash-state*
+      (~>
+        (default-flash-state)
+        (hash-insert 'direction 'backward)
+        (hash-insert 'extend #t)))
+    (set-status! "flash [backward] [extend]:")
     (flash-init)))
 
 (provide flash
          flash-backward
-         flash-forward)
+         flash-forward
+         flash-extend
+         flash-extend-backward
+         flash-extend-forward)
 
