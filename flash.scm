@@ -67,14 +67,44 @@
             (~> first-line
               (hash-insert 'matches (map (lambda (m) (hash 'row line-offset 'col m 'char-idx m)) matches))
               (hash-insert 'line-idx line-idx)))
-          (align-matches-with-softwraps-sub width (rest lines) direction (if (equal? 'backward direction) (- line-offset 1) (+ 1 line-offset)) (if (equal? 'backward direction) (- line-idx 1) (+ 1 line-idx))))
+          (align-matches-with-softwraps-sub
+            width
+            (rest lines)
+            direction
+            (if (equal? 'backward direction)
+                (- line-offset 1)
+                (+ 1 line-offset))
+            (if (equal? 'backward direction)
+                (- line-idx 1)
+                (+ 1 line-idx))))
         (append
           (list 
             (~> first-line
               ; TODO: softwrap happens on the edge of word and non-word character, making it non-uniform line width :sadpanda:
-              (hash-insert 'matches (map (lambda (m) (hash 'char-idx m 'row (+ line-offset (floor (/ m width))) 'col (if (> m width) (+ softwrap-width (modulo m width)) m))) matches))
+              (hash-insert
+                'matches
+                (map
+                  (lambda (m)
+                          (hash
+                            'char-idx m
+                            'row (if (equal? 'backward direction)
+                                     (- line-offset (floor (/ m width)))
+                                     (+ line-offset (floor (/ m width))))
+                            'col (if (> m width)
+                                     (+ softwrap-width (modulo m width))
+                                     m)))
+                  matches))
               (hash-insert 'line-idx line-idx)))
-          (align-matches-with-softwraps-sub width (rest lines) direction (if (equal? 'backward direction) (- line-offset (ceiling (/ len width))) (+ (ceiling (/ len width)) line-offset)) (if (equal? 'backward direction) (- line-idx 1) (+ 1 line-idx))))))))
+          (align-matches-with-softwraps-sub
+            width
+            (rest lines)
+            direction
+            (if (equal? 'backward direction)
+                (- line-offset (ceiling (/ len width)))
+                (+ (ceiling (/ len width)) line-offset))
+            (if (equal? 'backward direction)
+                (- line-idx 1)
+                (+ 1 line-idx))))))))
 
 (define (align-matches-with-softwraps width lines direction)
   (if (or (not (list? lines)) (empty? lines))
