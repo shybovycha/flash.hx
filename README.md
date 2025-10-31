@@ -35,7 +35,12 @@ You need to copy the `flash.scm` file from this repo to the `~/.config/helix/` d
 (require "flash.scm")
 ```
 
-Upon reloading Helix (the one built from the plugin system branch), you will be able to use `:flash` (currently - alias for `:flash-forward`), `:flash-forward` and `:flash-backward` commands.
+Upon reloading Helix (the one built from the plugin system branch), you will be able to use `:flash`, `:flash-forward` and `:flash-backward` commands.
+
+* `:flash` - performs search on the entire screen
+* `:flash-forward` - performs search starting from the current cursor (or just the first one if there are multiple) downwards
+* `:flash-backward` - performs search from the top of the screen to the current cursor (or the first one if there are multiple)
+
 But it is much more handy if you register keyboard shortcuts in the `init.scm`:
 
 ```scheme
@@ -53,6 +58,16 @@ But it is much more handy if you register keyboard shortcuts in the `init.scm`:
 
 Then you can access the functionality using <kbd>g</kbd> <kbd>/</kbd> and <kbd>g</kbd> <kbd>?</kbd>.
 
+My personal preference is to set just one keybinding to search and jump on the entire screen with <kbd>g</kbd> <kbd>/</kbd>:
+
+```scheme
+(keymap
+  (global)
+  (normal
+    (g
+      (/ ":flash"))))
+```
+
 ## Configuration
 
 The list of labels could be configured using the existing `jump-label-alphabet` config option under the `[editor]` section in the `~/.config/helix/config.toml` file.
@@ -61,6 +76,5 @@ The list of labels could be configured using the existing `jump-label-alphabet` 
 
 Currently, there are quite a few limitations in this plugin, most of them due to a work-in-progress nature of the plugin system:
 
-* it only supports either forward or backward lookups from the cursor line
 * there might be bugs and glitches (the implementation is rather convoluted due to many other limitations of the plugin system, the Steel language and my skill with both)
 
