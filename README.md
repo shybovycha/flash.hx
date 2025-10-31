@@ -77,4 +77,5 @@ The list of labels could be configured using the existing `jump-label-alphabet` 
 Currently, there are quite a few limitations in this plugin, most of them due to a work-in-progress nature of the plugin system:
 
 * there might be bugs and glitches (the implementation is rather convoluted due to many other limitations of the plugin system, the Steel language and my skill with both)
+* the plugin might handle soft-wraps very poorly
 
