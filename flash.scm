@@ -142,14 +142,12 @@
                                (find-matches-forward input first-line #f))))
               (find-matches-with-offset input rest-lines #f direction))))))
 
-(define (matches-and-labels input lines max-line-length cursor-in-buffer cursor-on-screen direction)
+(define (flash-flat-matches input lines max-line-length cursor-in-buffer cursor-on-screen direction)
   (let*
     ([initial-offset (if (equal? 'everywhere direction) #f (max 0 (- (position-col cursor-in-buffer) 1)))]
-     [alphabet (flash-jump-label-alphabet)]
      [lines-with-matches (find-matches-with-offset input lines initial-offset direction)]
-     [lines-with-positions (align-matches-with-softwraps max-line-length lines-with-matches direction)]
-     [flat-matches (unpack-matches lines-with-positions)])
-    (assign-labels flat-matches alphabet)))
+     [lines-with-positions (align-matches-with-softwraps max-line-length lines-with-matches direction)])
+    (unpack-matches lines-with-positions)))
 
 (define (flash-first-cursor-pos-on-screen)
   (if (and (list? (current-cursor)) (not (empty? (current-cursor))) (Position? (first (current-cursor))))
@@ -243,7 +241,7 @@
      [lines (split-many full-text "\n")])
     (cond
       [(equal? 'backward direction)
-       (matches-and-labels
+       (flash-flat-matches
          input
          (flash-pick-lines-backward lines cursor-in-buffer cursor-on-screen max-lines max-line-width)
          max-line-width
@@ -251,7 +249,7 @@
          cursor-on-screen
          direction)]
       [(equal? 'forward direction)
-       (matches-and-labels
+       (flash-flat-matches
          input
          (flash-pick-lines-forward lines cursor-in-buffer cursor-on-screen max-lines max-line-width)
          max-line-width
@@ -260,14 +258,14 @@
          direction)]
       [else
         (append
-          (matches-and-labels
+          (flash-flat-matches
             input
             (flash-pick-lines-backward lines cursor-in-buffer cursor-on-screen max-lines max-line-width)
             max-line-width
             cursor-in-buffer
             cursor-on-screen
             'backward)
-          (matches-and-labels
+          (flash-flat-matches
             input
             (flash-pick-lines-forward lines cursor-in-buffer cursor-on-screen max-lines max-line-width)
             max-line-width
@@ -282,7 +280,8 @@
        [input (hash-ref *flash-state* 'input)]
        [max-line-width (area-width rect)]
        [max-lines (area-height rect)]
-       [matches (flash-get-matches input direction max-line-width max-lines)])
+       [matches1 (flash-get-matches input direction max-line-width max-lines)]
+       [matches (assign-labels matches1 (flash-jump-label-alphabet))])
       (begin
        (flash-render-jump-labels frame matches input)
        (flash-update-status)
