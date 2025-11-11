@@ -176,11 +176,13 @@
               (find-matches-with-offset input rest-lines #f direction))))))
 
 (define (flash-flat-matches input lines max-line-length cursor-in-buffer cursor-on-screen direction)
-  (let*
-    ([initial-offset (if (equal? 'everywhere direction) #f (max 0 (- (position-col cursor-in-buffer) 1)))]
-     [lines-with-matches (find-matches-with-offset input lines initial-offset direction)]
-     [lines-with-positions (align-matches-with-softwraps max-line-length lines-with-matches direction)])
-    (unpack-matches lines-with-positions)))
+  (if (empty? lines)
+      '()
+      (let*
+        ([initial-offset (if (equal? 'everywhere direction) #f (max 0 (- (position-col cursor-in-buffer) 1)))]
+         [lines-with-matches (find-matches-with-offset input lines initial-offset direction)]
+         [lines-with-positions (align-matches-with-softwraps max-line-length lines-with-matches direction)])
+        (unpack-matches lines-with-positions))))
 
 (define (flash-first-cursor-pos-on-screen)
   (if (and (list? (current-cursor)) (not (empty? (current-cursor))) (Position? (first (current-cursor))))
@@ -192,7 +194,7 @@
     ([configured-alphabet (get-config-option-value "jump-label-alphabet")])
     (if (or (not (string? configured-alphabet)) (not (> (string-length configured-alphabet) 0)))
         (map integer->char (range (char->integer #\a) (char->integer #\z)))
-        configured-alphabet)))
+        (string->list configured-alphabet))))
 
 (define (flash-pick-lines-forward-sub lines offset max-lines line-width)
   (if (or (>= offset max-lines) (empty? lines))
@@ -224,11 +226,14 @@
 
 (define (flash-pick-lines-backward lines cursor-in-buffer cursor-on-screen max-lines line-width)
   (let*
-    ([lines2 (reverse (take lines (+ 1 (position-row cursor-in-buffer))))]
-     [trimmed-lines (append (list (substring (first lines2) 0 (position-col cursor-in-buffer))) (rest lines2))]
-     [offset (floor (/ (position-col cursor-on-screen) line-width))]
-     [max-lines (- max-lines (position-row cursor-on-screen))])
-    (flash-pick-lines-backward-sub trimmed-lines offset max-lines line-width)))
+    ([lines2 (reverse (take lines (+ 1 (position-row cursor-in-buffer))))])
+    (if (empty? lines2)
+        '()
+        (let*
+           ([trimmed-lines (append (list (substring (first lines2) 0 (position-col cursor-in-buffer))) (rest lines2))]
+            [offset (floor (/ (position-col cursor-on-screen) line-width))]
+            [max-lines (- max-lines (position-row cursor-on-screen))])
+           (flash-pick-lines-backward-sub trimmed-lines offset max-lines line-width)))))
 
 (define (flash-get-gutter)
   (let*
