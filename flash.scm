@@ -458,15 +458,15 @@
 (define (flash-get-jump-to) (set-status! (to-string ":" (hash-ref *flash-state* 'jump-to))))
 
 (define (flash-set-jump-to jump-to)
-  (set! *flash-state*
-    (cond
-      [(equal? "end" jump-to) (hash-insert *flash-state* 'jump-to 'end)]
-      [(equal? "start" jump-to) (hash-insert *flash-state* 'jump-to 'start)]
-      [else
-        (begin
-          (set-error! (to-string "Invalid value" jump-to ". Use 'start' or 'end'"))
-          *flash-state*
-        )])))
+  (if (not (or (equal? "end" jump-to) (equal? "start" jump-to)))
+      (set-error! (to-string "Invalid value" jump-to ". Use 'start' or 'end'"))
+      (begin
+        (set! *flash-state*
+          (cond
+            [(equal? "end" jump-to) (hash-insert *flash-state* 'jump-to 'end)]
+            [(equal? "start" jump-to) (hash-insert *flash-state* 'jump-to 'start)]
+            [else *flash-state*]))
+        (set-status! (to-string "Now jumping to" jump-to "of each match")))))
 
 (provide flash
          flash-backward
