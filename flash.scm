@@ -38,7 +38,7 @@
 
 ;; ----------------------------------------
 
-(define (default-flash-state) (hash 'input "" 'matches '() 'direction 'forward 'extend #f))
+(define (default-flash-state) (hash 'input "" 'matches '() 'direction 'forward 'extend #f 'jump-to 'start))
 (define *flash-state* (default-flash-state))
 
 (define (flash-update-status)
@@ -356,17 +356,18 @@
      (let*
        ([matches (hash-ref *flash-state* 'matches)]
         [found-match (find-first (lambda (m) (char=? key-char (hash-ref m 'label))) matches)]
-        [should-extend (hash-ref *flash-state* 'extend)])
-       (if found-match
+        [should-extend (hash-ref *flash-state* 'extend)]
+        [jump-to-option (hash-ref *flash-state* 'jump-to)])
+        (if found-match
           (begin
             (set-status! "")
             (helix.commands.goto-line (+ 1 (helix.static.get-current-line-number) (hash-ref found-match 'line-idx)) should-extend)
-            (helix.commands.goto-column (+ (max 0 (- (string-length (hash-ref *flash-state* 'input)) 1)) (hash-ref found-match 'char-idx)) should-extend)
-            event-result/close)
-          (begin
+            (helix.commands.goto-column (+ (hash-ref found-match 'char-idx) (if (equal? jump-to-option 'end) (string-length (hash-ref *flash-state* 'input)) 0))) should-extend)
+          event-result/close)
+         (begin
             (flash-append-input-char key-char)
             (flash-update-status)
-            event-result/consume)))]
+            event-result/consume))]
     [(key-event? event) event-result/close]
     [else event-result/ignore]))
 
@@ -389,6 +390,7 @@
     (set! *flash-state*
       (~>
         (default-flash-state)
+        (hash-insert 'jump-to (hash-ref *flash-state* 'jump-to))
         (hash-insert 'direction 'everywhere)
         (hash-insert 'extend (equal? (editor-mode) "select"))))
     (set-status! "flash:")
@@ -401,6 +403,7 @@
     (set! *flash-state*
       (~>
         (default-flash-state)
+        (hash-insert 'jump-to (hash-ref *flash-state* 'jump-to))
         (hash-insert 'direction 'backward)
         (hash-insert 'extend (equal? (editor-mode) "select"))))
     (set-status! "flash [backward]:")
@@ -413,6 +416,7 @@
     (set! *flash-state*
       (~>
         (default-flash-state)
+        (hash-insert 'jump-to (hash-ref *flash-state* 'jump-to))
         (hash-insert 'direction 'forward)
         (hash-insert 'extend (equal? (editor-mode) "select"))))
     (set-status! "flash [forward]:")
@@ -423,6 +427,7 @@
     (set! *flash-state*
       (~>
         (default-flash-state)
+        (hash-insert 'jump-to (hash-ref *flash-state* 'jump-to))
         (hash-insert 'direction 'everywhere)
         (hash-insert 'extend #t)))
     (set-status! "flash [forward] [extend]:")
@@ -433,6 +438,7 @@
     (set! *flash-state*
       (~>
         (default-flash-state)
+        (hash-insert 'jump-to (hash-ref *flash-state* 'jump-to))
         (hash-insert 'direction 'forward)
         (hash-insert 'extend #t)))
     (set-status! "flash [forward] [extend]:")
@@ -443,15 +449,31 @@
     (set! *flash-state*
       (~>
         (default-flash-state)
+        (hash-insert 'jump-to (hash-ref *flash-state* 'jump-to))
         (hash-insert 'direction 'backward)
         (hash-insert 'extend #t)))
     (set-status! "flash [backward] [extend]:")
     (flash-init)))
+
+(define (flash-get-jump-to) (set-status! (to-string ":" (hash-ref *flash-state* 'jump-to))))
+
+(define (flash-set-jump-to jump-to)
+  (set! *flash-state*
+    (cond
+      [(equal? "end" jump-to) (hash-insert *flash-state* 'jump-to 'end)]
+      [(equal? "start" jump-to) (hash-insert *flash-state* 'jump-to 'start)]
+      [else
+        (begin
+          (set-error! (to-string "Invalid value" jump-to ". Use 'start' or 'end'"))
+          *flash-state*
+        )])))
 
 (provide flash
          flash-backward
          flash-forward
          flash-extend
          flash-extend-backward
-         flash-extend-forward)
+         flash-extend-forward
+         flash-set-jump-to
+         flash-get-jump-to)
 
