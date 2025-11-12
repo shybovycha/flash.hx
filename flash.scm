@@ -146,12 +146,15 @@
       '()
       (unpack-matches-sub input matches '())))
 
-(define (assign-labels matches alphabet)
+(define (get-labels matches alphabet)
   (let*
      ([next-letters (map (lambda (m) (hash-ref m 'next-char)) matches)]
       [next-letters-set (list->hashset next-letters)]
       [available-letters (filter (lambda (c) (not (hashset-contains? next-letters-set c))) alphabet)])
-     (map (lambda (m) (hash-insert (first m) 'label (second m))) (zip matches available-letters))))
+     available-letters))
+
+(define (assign-labels matches alphabet)
+  (map (lambda (m) (hash-insert (first m) 'label (second m))) (zip matches (get-labels matches alphabet))))
 
 (define (find-matches-with-offset input lines offset direction)
   (if (or (not (list? lines)) (empty? lines))
@@ -297,21 +300,20 @@
          cursor-on-screen
          direction)]
       [else
-        (append
-          (flash-flat-matches
-            input
-            (flash-pick-lines-backward lines cursor-in-buffer cursor-on-screen max-lines max-line-width)
-            max-line-width
-            cursor-in-buffer
-            cursor-on-screen
-            'backward)
-          (flash-flat-matches
-            input
-            (flash-pick-lines-forward lines cursor-in-buffer cursor-on-screen max-lines max-line-width)
-            max-line-width
-            cursor-in-buffer
-            cursor-on-screen
-            'forward))])))
+        (let*
+          ([lines-back (flash-pick-lines-backward lines cursor-in-buffer cursor-on-screen max-lines max-line-width)]
+           [lines-forward (flash-pick-lines-forward lines cursor-in-buffer cursor-on-screen max-lines max-line-width)]
+           [flat-matches-back (flash-flat-matches input lines-back max-line-width cursor-in-buffer cursor-on-screen 'backward)]
+           [flat-matches-forward (flash-flat-matches input lines-forward max-line-width cursor-in-buffer cursor-on-screen 'forward)]
+           [labels0 (get-labels (append flat-matches-back flat-matches-forward) (flash-jump-label-alphabet))])
+          (if (< (length labels0) (+ (length flat-matches-back) (length flat-matches-forward)))
+              (append
+                (take flat-matches-back (floor (/ (min (length flat-matches-back) (length labels0)) 2)))
+                (take flat-matches-forward (floor (/ (min (length flat-matches-forward) (length labels0)) 2)))) ; balance back and forward matches to prevent one side overwhelming the other
+              (append
+                flat-matches-back
+                flat-matches-forward))
+        )])))
 
 (define (flash-render state rect frame)
   (if (> (string-length (hash-ref *flash-state* 'input)) 0)
@@ -359,7 +361,7 @@
           (begin
             (set-status! "")
             (helix.commands.goto-line (+ 1 (helix.static.get-current-line-number) (hash-ref found-match 'line-idx)) should-extend)
-            (helix.commands.goto-column (+ (max 0 (- (string-length (hash-ref *flash-state* 'input)) 1)) (hash-ref found-match 'char-idx) 1) should-extend)
+            (helix.commands.goto-column (+ (max 0 (- (string-length (hash-ref *flash-state* 'input)) 1)) (hash-ref found-match 'char-idx)) should-extend)
             event-result/close)
           (begin
             (flash-append-input-char key-char)
