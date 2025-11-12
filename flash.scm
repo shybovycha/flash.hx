@@ -119,7 +119,7 @@
       0
       0)))
 
-(define (unpack-matches-sub entries acc)
+(define (unpack-matches-sub input entries acc)
   (if (empty? entries)
     acc
     (let*
@@ -127,6 +127,8 @@
        [line (hash-ref entry 'line)]
        [line-idx (hash-ref entry 'line-idx)]
        [matches (hash-ref entry 'matches)]
+       [input-len (string-length input)]
+       [matches1 (filter (lambda (m) (< (+ (hash-ref m 'char-idx) input-len) (string-length line))) matches)]
        [new-matches
          (map
            (lambda (m)
@@ -135,14 +137,14 @@
                      'col (hash-ref m 'col)
                      'line-idx line-idx
                      'char-idx (hash-ref m 'char-idx)
-                     'next-char (string-ref line (min (- (string-length line) 1) (+ (hash-ref m 'char-idx) 1)))))
-           matches)])
-      (unpack-matches-sub (rest entries) (append acc new-matches)))))
+                     'next-char (string-ref line (+ (hash-ref m 'char-idx) input-len))))
+           matches1)])
+      (unpack-matches-sub input (rest entries) (append acc new-matches)))))
 
-(define (unpack-matches matches)
+(define (unpack-matches input matches)
   (if (or (not (list? matches)) (empty? matches))
       '()
-      (unpack-matches-sub matches '())))
+      (unpack-matches-sub input matches '())))
 
 (define (assign-labels matches alphabet)
   (let*
@@ -182,7 +184,7 @@
         ([initial-offset (if (equal? 'everywhere direction) #f (max 0 (- (position-col cursor-in-buffer) 1)))]
          [lines-with-matches (find-matches-with-offset input lines initial-offset direction)]
          [lines-with-positions (align-matches-with-softwraps max-line-length lines-with-matches direction)])
-        (unpack-matches lines-with-positions))))
+        (unpack-matches input lines-with-positions))))
 
 (define (flash-first-cursor-pos-on-screen)
   (if (and (list? (current-cursor)) (not (empty? (current-cursor))) (Position? (first (current-cursor))))
