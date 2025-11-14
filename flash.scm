@@ -38,8 +38,10 @@
 
 ;; ----------------------------------------
 
-(define (default-flash-state) (hash 'input "" 'matches '() 'direction 'forward 'extend #f 'jump-to 'start))
+(define (default-flash-state) (hash 'input "" 'matches '() 'direction 'forward 'extend #f))
 (define *flash-state* (default-flash-state))
+
+(define *flash-config* (hash 'jump-to 'start))
 
 (define (flash-update-status)
   (let*
@@ -357,7 +359,7 @@
        ([matches (hash-ref *flash-state* 'matches)]
         [found-match (find-first (lambda (m) (char=? key-char (hash-ref m 'label))) matches)]
         [should-extend (hash-ref *flash-state* 'extend)]
-        [jump-to-option (hash-ref *flash-state* 'jump-to)])
+        [jump-to-option (hash-ref *flash-config* 'jump-to)])
         (if found-match
           (begin
             (set-status! "")
@@ -390,7 +392,6 @@
     (set! *flash-state*
       (~>
         (default-flash-state)
-        (hash-insert 'jump-to (hash-ref *flash-state* 'jump-to))
         (hash-insert 'direction 'everywhere)
         (hash-insert 'extend (equal? (editor-mode) "select"))))
     (set-status! "flash:")
@@ -403,7 +404,6 @@
     (set! *flash-state*
       (~>
         (default-flash-state)
-        (hash-insert 'jump-to (hash-ref *flash-state* 'jump-to))
         (hash-insert 'direction 'backward)
         (hash-insert 'extend (equal? (editor-mode) "select"))))
     (set-status! "flash [backward]:")
@@ -416,7 +416,6 @@
     (set! *flash-state*
       (~>
         (default-flash-state)
-        (hash-insert 'jump-to (hash-ref *flash-state* 'jump-to))
         (hash-insert 'direction 'forward)
         (hash-insert 'extend (equal? (editor-mode) "select"))))
     (set-status! "flash [forward]:")
@@ -427,7 +426,6 @@
     (set! *flash-state*
       (~>
         (default-flash-state)
-        (hash-insert 'jump-to (hash-ref *flash-state* 'jump-to))
         (hash-insert 'direction 'everywhere)
         (hash-insert 'extend #t)))
     (set-status! "flash [forward] [extend]:")
@@ -438,7 +436,6 @@
     (set! *flash-state*
       (~>
         (default-flash-state)
-        (hash-insert 'jump-to (hash-ref *flash-state* 'jump-to))
         (hash-insert 'direction 'forward)
         (hash-insert 'extend #t)))
     (set-status! "flash [forward] [extend]:")
@@ -449,23 +446,22 @@
     (set! *flash-state*
       (~>
         (default-flash-state)
-        (hash-insert 'jump-to (hash-ref *flash-state* 'jump-to))
         (hash-insert 'direction 'backward)
         (hash-insert 'extend #t)))
     (set-status! "flash [backward] [extend]:")
     (flash-init)))
 
-(define (flash-get-jump-to) (set-status! (to-string ":" (hash-ref *flash-state* 'jump-to))))
+(define (flash-get-jump-to) (set-status! (to-string ":" (hash-ref *flash-config* 'jump-to))))
 
 (define (flash-set-jump-to jump-to)
   (if (not (or (equal? "end" jump-to) (equal? "start" jump-to)))
       (set-error! (to-string "Invalid value" jump-to ". Use 'start' or 'end'"))
       (begin
-        (set! *flash-state*
+        (set! *flash-config*
           (cond
-            [(equal? "end" jump-to) (hash-insert *flash-state* 'jump-to 'end)]
-            [(equal? "start" jump-to) (hash-insert *flash-state* 'jump-to 'start)]
-            [else *flash-state*]))
+            [(equal? "end" jump-to) (hash-insert *flash-config* 'jump-to 'end)]
+            [(equal? "start" jump-to) (hash-insert *flash-config* 'jump-to 'start)]
+            [else *flash-config*]))
         (set-status! (to-string "Now jumping to" jump-to "of each match")))))
 
 (provide flash
