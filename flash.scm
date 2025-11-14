@@ -256,8 +256,8 @@
     ([cursor-on-screen (flash-first-cursor-pos-on-screen)]
      [cursor-line-on-screen (position-row cursor-on-screen)]
      [gutter (flash-get-gutter)]
-     [label-style (style-with-bold (theme-scope "ui.cursor.match"))]
-     [match-style (style-with-italics (theme-scope "ui.text.focus"))]
+     [label-style (style-bg (style-with-bold (theme-scope "ui.virtual.jump-label")) (style->bg (theme-scope "ui.selection")))]
+     [match-style (style-bg (style-with-italics (theme-scope "ui.text.focus")) (style->bg (theme-scope "ui.selection")))]
      [input-len (string-length input)])
   (map
     (lambda (a)
@@ -451,7 +451,7 @@
     (set-status! "flash [backward] [extend]:")
     (flash-init)))
 
-(define (flash-get-jump-to) (set-status! (to-string ":" (hash-ref *flash-config* 'jump-to))))
+(define (flash-get-jump-to) (set-status! (to-string (hash-ref *flash-config* 'jump-to))))
 
 (define (flash-set-jump-to jump-to)
   (if (not (or (equal? "end" jump-to) (equal? "start" jump-to)))
