@@ -451,6 +451,9 @@
     (set-status! "flash [backward] [extend]:")
     (flash-init)))
 
+(define (flash-config key value)
+  (set! *flash-config* (hash-insert *flash-config* key value)))
+
 (define (flash-get-jump-to) (set-status! (to-string (hash-ref *flash-config* 'jump-to))))
 
 (define (flash-set-jump-to jump-to)
@@ -471,5 +474,6 @@
          flash-extend-backward
          flash-extend-forward
          flash-set-jump-to
-         flash-get-jump-to)
+         flash-get-jump-to
+         flash-config)
 

@@ -79,6 +79,12 @@ My personal preference is to set just one keybinding to search and jump on the e
 
 The list of labels could be configured using the existing `jump-label-alphabet` config option under the `[editor]` section in the `~/.config/helix/config.toml` file.
 
+This plugin supports two matching modes - when the jump label is placed at the end of the match and when it is placed at the start of the match, meaning jump
+would happen to either the beginning of the match or the end of the match, correspondingly.
+
+This behaviour can be configured by either issuing a command `:flash-set-jump-to [start|end]` or
+by using the `(flash-config 'jump-to 'start)` or `(flash-config 'jump-to 'end)` helpers in the `init.scm` file.
+
 ## Known limitations
 
 Currently, there are quite a few limitations in this plugin, most of them due to a work-in-progress nature of the plugin system:
