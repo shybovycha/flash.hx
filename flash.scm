@@ -362,12 +362,12 @@
           (begin
             (set-status! "")
             (helix.commands.goto-line (+ 1 (helix.static.get-current-line-number) (hash-ref found-match 'line-idx)) should-extend)
-            (helix.commands.goto-column (+ (hash-ref found-match 'char-idx) (if (equal? jump-to-option 'end) (string-length (hash-ref *flash-state* 'input)) 0))) should-extend)
+            (helix.commands.goto-column (+ (hash-ref found-match 'char-idx) (if (equal? jump-to-option 'end) (string-length (hash-ref *flash-state* 'input)) 0)) should-extend)
           event-result/close)
          (begin
             (flash-append-input-char key-char)
             (flash-update-status)
-            event-result/consume))]
+            event-result/consume)))]
     [(key-event? event) event-result/close]
     [else event-result/ignore]))
 
