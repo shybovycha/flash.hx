@@ -266,12 +266,12 @@
          [match-y (hash-ref a 'row)]
          [label (string (hash-ref a 'label))]
          [match-row (+ cursor-line-on-screen match-y)]
-         [match-col (+ gutter input-len match-x)])
+         [match-col (if (equal? (hash-ref *flash-config* 'jump-to) 'end) (+ gutter input-len match-x) (+ gutter match-x))])
          (begin
-           (frame-set-string! frame match-col match-row label label-style)
            ; INFO: this works extremely poorly with wrapped lines (soft-wraps)
            ; TODO: need to account for gutter + line width + line-wrap string (character?) and accumulate over all lines
-           (map (lambda (x) (frame-set-string! frame (+ gutter match-x x) match-row (string (string-ref input x)) match-style)) (range input-len)))))
+           (map (lambda (x) (frame-set-string! frame (+ gutter match-x x) match-row (string (string-ref input x)) match-style)) (range input-len))
+           (frame-set-string! frame match-col match-row label label-style))))
     matches)))
 
 (define (flash-get-matches input direction max-line-width max-lines)
